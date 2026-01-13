@@ -12,12 +12,31 @@ export default function ContactForm() {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 5000);
-    setFormData({ name: "", email: "", phone: "", experience: "", message: "" });
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("https://formspree.io/f/xzddbwzv", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (response.ok) {
+        setSubmitted(true);
+        setFormData({ name: "", email: "", phone: "", experience: "", message: "" });
+        setTimeout(() => setSubmitted(false), 5000);
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -141,9 +160,10 @@ export default function ContactForm() {
 
               <button
                 type="submit"
-                className="w-full px-8 py-4 bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors duration-200"
+                disabled={submitting}
+                className="w-full px-8 py-4 bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Send Message
+                {submitting ? "Sending..." : "Send Message"}
               </button>
 
               <p className="text-sm text-gray-500 text-center">
