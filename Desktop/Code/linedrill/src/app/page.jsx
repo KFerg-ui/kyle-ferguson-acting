@@ -210,8 +210,22 @@ export default function HomePage() {
           <CharacterStep
             characters={parsed.characters}
             formatInfo={parsed.formatDescription}
-            onSelect={(c) => {
-              setSelectedCharacter(c);
+            dialogueEntries={parsed.dialogueEntries}
+            onSelect={(canonical, mergedVariants) => {
+              if (mergedVariants && mergedVariants.length > 1) {
+                const variantSet = new Set(mergedVariants);
+                const updatedEntries = parsed.dialogueEntries.map((entry) => {
+                  if (entry.type === "dialogue" && variantSet.has(entry.character)) {
+                    return { ...entry, character: canonical };
+                  }
+                  return entry;
+                });
+                const updatedChars = parsed.characters.filter(
+                  (c) => !variantSet.has(c) || c === canonical
+                );
+                setParsed({ ...parsed, dialogueEntries: updatedEntries, characters: updatedChars });
+              }
+              setSelectedCharacter(canonical);
               setStep("tag");
             }}
           />

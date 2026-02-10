@@ -4,6 +4,79 @@
  * Regex-based parser that detects characters, scene breaks, and dialogue.
  * Used when the AI parser is unavailable or as a complement to merge with AI results.
  */
+
+// --- Character name normalization & filtering ---
+
+const NON_CHARACTER_EXACT = new Set([
+  "DRAMATIS PERSONAE", "CAST OF CHARACTERS", "CHARACTERS", "CAST",
+  "SETTING", "SETTINGS", "TIME", "PLACE", "SCENE", "SYNOPSIS",
+  "NOTES", "NOTE", "PROLOGUE", "EPILOGUE", "INTERMISSION",
+  "CURTAIN", "BLACKOUT", "END", "THE END", "FIN",
+  "FADE IN", "FADE OUT", "CUT TO", "CONTINUED", "CONT'D", "MORE",
+  "END OF ACT", "AUTHOR'S NOTE", "TRANSLATOR'S NOTE",
+]);
+
+const NON_CHARACTER_PATTERNS = [
+  /^BY\s/,
+  /^TRANSLATED\s/,
+  /^ADAPTED\s/,
+  /^WRITTEN\s/,
+  /^DIRECTED\s/,
+  /^ACT\s/,
+  /^SCENE\s/,
+  /^PART\s/,
+  /^(INT|EXT|INT\/EXT)\./,
+  /^(COLD OPEN|TEASER)\b/,
+  /^COPYRIGHT/,
+  /^\d+\.?\s*$/,
+];
+
+export function normalizeCharacterName(raw) {
+  let name = raw.trim().toUpperCase();
+  name = name.replace(/\s*\(.*?\)\s*/g, " ");
+  name = name.replace(/\.+$/, "");
+  name = name.replace(/\s{2,}/g, " ").trim();
+  return name;
+}
+
+function isBlockedCharacter(name) {
+  if (!name || name.length < 2) return true;
+  if (NON_CHARACTER_EXACT.has(name)) return true;
+  if (NON_CHARACTER_PATTERNS.some((p) => p.test(name))) return true;
+  return false;
+}
+
+export function groupSimilarCharacters(characters) {
+  const sorted = [...characters].sort((a, b) => a.length - b.length);
+  const groups = new Map();
+  const assigned = new Set();
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (assigned.has(sorted[i])) continue;
+
+    const base = sorted[i];
+    const group = [base];
+    assigned.add(base);
+
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (assigned.has(sorted[j])) continue;
+      if (
+        sorted[j].startsWith(base + " ") ||
+        sorted[j].startsWith(base + ".")
+      ) {
+        group.push(sorted[j]);
+        assigned.add(sorted[j]);
+      }
+    }
+
+    groups.set(base, group);
+  }
+
+  return groups;
+}
+
+// --- Main parser ---
+
 export function localParseScript(rawText) {
   const lines = rawText.split("\n");
   const characters = new Set();
@@ -36,13 +109,16 @@ export function localParseScript(rawText) {
 
   function flush() {
     if (currentCharacter && currentDialogue.trim()) {
-      characters.add(currentCharacter);
-      dialogueEntries.push({
-        type: "dialogue",
-        character: currentCharacter,
-        text: currentDialogue.trim(),
-        srcLine: currentLineIdx,
-      });
+      const normalized = normalizeCharacterName(currentCharacter);
+      if (normalized && !isBlockedCharacter(normalized)) {
+        characters.add(normalized);
+        dialogueEntries.push({
+          type: "dialogue",
+          character: normalized,
+          text: currentDialogue.trim(),
+          srcLine: currentLineIdx,
+        });
+      }
     }
     currentDialogue = "";
   }
@@ -164,14 +240,26 @@ export function localParseScript(rawText) {
 export function mergeResults(aiResult, localResult, rawText) {
   const lines = rawText.split("\n");
 
-  // Characters: union of both, normalized to uppercase
+  // Characters: union of both, normalized and filtered
   const charSet = new Set();
-  (localResult.characters || []).forEach((c) =>
-    charSet.add(c.toUpperCase().trim())
-  );
+  (localResult.characters || []).forEach((c) => {
+    const norm = normalizeCharacterName(c);
+    if (norm && !isBlockedCharacter(norm)) charSet.add(norm);
+  });
   if (aiResult?.characters) {
-    aiResult.characters.forEach((c) => charSet.add(c.toUpperCase().trim()));
+    aiResult.characters.forEach((c) => {
+      const norm = normalizeCharacterName(c);
+      if (norm && !isBlockedCharacter(norm)) charSet.add(norm);
+    });
   }
+
+  // Normalize dialogue entry character names as safety net
+  const dialogueEntries = (localResult.dialogueEntries || []).map((d) => {
+    if (d.type === "dialogue" && d.character) {
+      return { ...d, character: normalizeCharacterName(d.character) };
+    }
+    return d;
+  });
 
   // Breaks: prefer AI, fall back to local
   let breaks = [];
@@ -220,7 +308,7 @@ export function mergeResults(aiResult, localResult, rawText) {
   return {
     characters: Array.from(charSet).sort(),
     breaks,
-    dialogueEntries: localResult.dialogueEntries || [],
+    dialogueEntries,
     format: aiResult?.format || "unknown",
     formatDescription: aiResult?.formatDescription || "",
   };
