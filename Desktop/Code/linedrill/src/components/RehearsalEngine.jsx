@@ -43,12 +43,16 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
   const modeRef = useRef(null);
   const drillIntervalRef = useRef(null);
   const cueEndTimeRef = useRef(null);
+  const sceneRef = useRef(scene);
+  const advanceLineRef = useRef(null);
+  const recordScoreRef = useRef(null);
 
   // Keep refs in sync with state
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { lineIndexRef.current = lineIndex; }, [lineIndex]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { sceneRef.current = scene; }, [scene]);
 
   // Check browser support
   useEffect(() => {
@@ -90,7 +94,8 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
   // --- Core stepper ---
 
   const advanceLine = useCallback((index) => {
-    if (index >= scene.lines.length) {
+    const s = sceneRef.current;
+    if (index >= s.lines.length) {
       setPhase("done");
       onLineChange(null);
       if (drillIntervalRef.current) {
@@ -102,7 +107,7 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
 
     if (pausedRef.current) return;
 
-    const line = scene.lines[index];
+    const line = s.lines[index];
     setLineIndex(index);
     lineIndexRef.current = index;
     setTranscript("");
@@ -114,25 +119,24 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
       setPhase("direction");
       const isSpeed = modeRef.current === "speed";
       const delay = isSpeed ? 1000 : Math.max(1500, line.text.split(/\s+/).length * 300);
-      timerRef.current = setTimeout(() => advanceLine(index + 1), delay);
+      timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
     } else if (line.character !== selectedCharacter) {
       setPhase("partner");
       const isSpeed = modeRef.current === "speed";
       if (ttsRef.current) {
         ttsRef.current.speak(line.text).then(() => {
-          if (!pausedRef.current) advanceLine(index + 1);
+          if (!pausedRef.current) advanceLineRef.current(index + 1);
         }).catch(() => {
-          // TTS failed — auto-advance after calculated time
           const delay = isSpeed
             ? Math.max(800, line.text.split(/\s+/).length * 200)
             : Math.max(1500, line.text.split(/\s+/).length * 300);
-          timerRef.current = setTimeout(() => advanceLine(index + 1), delay);
+          timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
         });
       } else {
         const delay = isSpeed
           ? Math.max(800, line.text.split(/\s+/).length * 200)
           : Math.max(1500, line.text.split(/\s+/).length * 300);
-        timerRef.current = setTimeout(() => advanceLine(index + 1), delay);
+        timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
       }
     } else {
       // User's line — listen
@@ -140,7 +144,8 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
       cueEndTimeRef.current = Date.now();
       startListening(line, index);
     }
-  }, [scene, selectedCharacter, onLineChange]);
+  }, [selectedCharacter, onLineChange]);
+  advanceLineRef.current = advanceLine;
 
   const startListening = useCallback((line, index) => {
     if (sttRef.current) sttRef.current.abort();
@@ -165,7 +170,7 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
       onFinal: (t) => {
         const result = scoreLine(line.text, t);
         setLiveScore(result.score);
-        recordScore(line, t, result.score, index);
+        recordScoreRef.current(line, t, result.score, index);
       },
       onError: (err) => {
         setError(err);
@@ -230,9 +235,10 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
     // Shorter inter-line delay for speed drill
     const advanceDelay = modeRef.current === "speed" ? 400 : 800;
     timerRef.current = setTimeout(() => {
-      advanceLine(index + 1);
+      advanceLineRef.current(index + 1);
     }, advanceDelay);
-  }, [advanceLine, usedLineThisTurn]);
+  }, [usedLineThisTurn]);
+  recordScoreRef.current = recordScore;
 
   // --- Controls ---
 
