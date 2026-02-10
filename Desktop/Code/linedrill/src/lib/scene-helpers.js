@@ -45,7 +45,12 @@ export function buildFinalScenes(dialogueEntries, confirmedBreaks) {
 
     const sceneLines = dialogueEntries
       .filter((d) => d.srcLine > brk.srcLine && d.srcLine < nextLine)
-      .map((d, idx) => ({ ...d, id: `${brk.label}-${idx}` }));
+      .map((d, idx) => ({
+        ...d,
+        // Strip inline parenthetical directions from dialogue (e.g. "(Pause)", "(to John)")
+        text: d.type === "dialogue" ? d.text.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim() : d.text,
+        id: `${brk.label}-${idx}`,
+      }));
 
     scenes.push({
       label: brk.label,

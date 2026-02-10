@@ -107,10 +107,11 @@ function HighlightText({ text, query, isActive }) {
   );
 }
 
-export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search" }) {
+export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search", zoom = 1.0 }) {
   const scrollRef = useRef(null);
   const activeLineRef = useRef(null);
   const isRehearsal = highlightStyle === "rehearsal";
+  const z = (base) => Math.round(base * zoom);
 
   // Scroll to top when scene changes (only when not searching/rehearsing)
   useEffect(() => {
@@ -166,7 +167,7 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
         if (line.type === "direction") {
           return (
             <div key={line.id} ref={isActiveMatch ? activeLineRef : null} style={{
-              fontStyle: "italic", color: "#bbb", fontSize: 13, lineHeight: 1.75,
+              fontStyle: "italic", color: "#bbb", fontSize: z(15), lineHeight: 1.75,
               padding: "8px 16px", marginBottom: 14, whiteSpace: "pre-wrap",
               background: directionBg(isActiveMatch), borderRadius: 4,
               transition: "background 0.2s ease",
@@ -182,7 +183,7 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
           <div key={line.id} ref={isActiveMatch ? activeLineRef : null} style={{ marginBottom: 20 }}>
             {/* Character name - centered, screenplay style */}
             <div style={{
-              fontSize: 13, fontWeight: 700, textTransform: "uppercase",
+              fontSize: z(14), fontWeight: 700, textTransform: "uppercase",
               textAlign: "center", letterSpacing: "0.14em", marginBottom: 3,
               color: isMe ? GOLD : "#999",
             }}>
@@ -196,7 +197,7 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
             </div>
             {/* Dialogue text */}
             <div style={{
-              fontSize: 14, lineHeight: 1.75, maxWidth: 440, margin: "0 auto",
+              fontSize: z(16), lineHeight: 1.75, maxWidth: 500, margin: "0 auto",
               color: isMe ? "#fff" : "#ddd",
               padding: isMe ? "5px 14px" : "2px 14px",
               background: dialogueBg(isActiveMatch, isMe),

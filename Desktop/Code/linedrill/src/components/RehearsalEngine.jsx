@@ -367,67 +367,22 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
     );
   }
 
-  // Idle — mode selection
+  // Idle — compact mode buttons
   if (phase === "idle") {
-    const standardStats = getSceneStats(selectedCharacter, scene.label, "standard");
-    const speedStats = getSceneStats(selectedCharacter, scene.label, "speed");
-
     return (
-      <div style={panelStyle}>
-        <div style={{ textAlign: "center", padding: "8px 0" }}>
-          <div style={{ fontSize: 11, color: "#888", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 14 }}>
-            Choose Your Mode
-          </div>
-
-          {/* Mode cards */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-            {/* Standard */}
-            <button
-              onClick={() => handleStart("standard")}
-              style={modeCardStyle}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.background = "rgba(201,162,39,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#444"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#eee", marginTop: 6 }}>Standard</div>
-              <div style={{ fontSize: 10, color: "#777", lineHeight: 1.4, marginTop: 4 }}>
-                At your pace<br/>Focus on accuracy
-              </div>
-              {standardStats && (
-                <div style={{ fontSize: 9, color: "#666", marginTop: 8, borderTop: "1px solid #2a2a2a", paddingTop: 6 }}>
-                  Best: <span style={{ color: GOLD }}>{standardStats.best}%</span> &middot; Avg: {standardStats.average}% &middot; {standardStats.runCount} run{standardStats.runCount !== 1 ? "s" : ""}
-                </div>
-              )}
-            </button>
-
-            {/* Speed Drill */}
-            <button
-              onClick={() => handleStart("speed")}
-              style={modeCardStyle}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#e8a735"; e.currentTarget.style.background = "rgba(232,167,53,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#444"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e8a735" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 1"/><path d="M5 3l4 4"/><path d="M19 3l-4 4"/><line x1="12" y1="1" x2="12" y2="3"/>
-              </svg>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#eee", marginTop: 6 }}>Speed Drill</div>
-              <div style={{ fontSize: 10, color: "#777", lineHeight: 1.4, marginTop: 4 }}>
-                Beat the clock<br/>Fast TTS, timed lines
-              </div>
-              {speedStats && (
-                <div style={{ fontSize: 9, color: "#666", marginTop: 8, borderTop: "1px solid #2a2a2a", paddingTop: 6 }}>
-                  Best: <span style={{ color: "#e8a735" }}>{formatTime(speedStats.bestTime)}</span> &middot; {speedStats.best}% &middot; {speedStats.runCount} run{speedStats.runCount !== 1 ? "s" : ""}
-                </div>
-              )}
-            </button>
-          </div>
-
-          <div style={{ fontSize: 11, color: "#666" }}>
-            {userLineCount} of your lines in this scene
-          </div>
-        </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 }}>
+        <button onClick={() => handleStart("standard")} style={compactModeBtn}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Standard
+        </button>
+        <button onClick={() => handleStart("speed")} style={compactModeBtn}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8a735" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 1"/><line x1="12" y1="1" x2="12" y2="3"/>
+          </svg>
+          Speed Drill
+        </button>
       </div>
     );
   }
@@ -698,18 +653,19 @@ const panelStyle = {
   borderRadius: 6,
 };
 
-const modeCardStyle = {
-  flex: 1,
+const compactModeBtn = {
   display: "flex",
-  flexDirection: "column",
   alignItems: "center",
-  padding: "16px 12px",
-  borderRadius: 6,
+  gap: 6,
+  padding: "7px 14px",
+  borderRadius: 5,
   border: "1px solid #444",
   background: "rgba(255,255,255,0.03)",
+  color: "#ccc",
+  fontSize: 12,
+  fontWeight: 600,
   cursor: "pointer",
   fontFamily: "inherit",
-  transition: "border-color 0.15s, background 0.15s",
 };
 
 const btnPrimary = {

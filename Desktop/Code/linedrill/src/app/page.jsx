@@ -35,6 +35,7 @@ export default function HomePage() {
   const [activeMatchIdx, setActiveMatchIdx] = useState(0);
   const [rehearsalLineId, setRehearsalLineId] = useState(null);
   const [rehearsalActive, setRehearsalActive] = useState(false);
+  const [zoom, setZoom] = useState(1.0);
 
   // Build flat list of matches across all scenes
   const searchMatches = useMemo(() => {
@@ -237,16 +238,21 @@ export default function HomePage() {
               <div style={{ fontSize: 12, color: "#888" }}>
                 Playing: <span style={{ color: GOLD, fontWeight: 700 }}>{selectedCharacter}</span>
               </div>
-              {!rehearsalActive && (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => setSearchOpen((o) => !o)} style={BTN_SMALL} title="Search script (Cmd+F)">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
-                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                  </button>
-                  <button onClick={() => setStep("tag")} style={BTN_SMALL}>Edit Scenes</button>
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {/* Zoom controls */}
+                <button onClick={() => setZoom((z) => Math.max(0.8, +(z - 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom out">A-</button>
+                <button onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom in">A+</button>
+                {!rehearsalActive && (
+                  <>
+                    <button onClick={() => setSearchOpen((o) => !o)} style={BTN_SMALL} title="Search script (Cmd+F)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => setStep("tag")} style={BTN_SMALL}>Edit Scenes</button>
+                  </>
+                )}
+              </div>
             </div>
 
             {searchOpen && !rehearsalActive && (
@@ -274,14 +280,6 @@ export default function HomePage() {
               }}
               selectedCharacter={selectedCharacter}
             />
-            <ScriptViewer
-              scene={finalScenes[activeScene]}
-              selectedCharacter={selectedCharacter}
-              searchQuery={searchOpen && !rehearsalActive ? searchQuery : ""}
-              activeMatchLineId={rehearsalLineId || searchMatches[activeMatchIdx]?.lineId || null}
-              highlightStyle={rehearsalLineId ? "rehearsal" : "search"}
-            />
-
             <RehearsalEngine
               scene={finalScenes[activeScene]}
               selectedCharacter={selectedCharacter}
@@ -293,6 +291,15 @@ export default function HomePage() {
                 setRehearsalLineId(null);
                 setRehearsalActive(false);
               }}
+            />
+
+            <ScriptViewer
+              scene={finalScenes[activeScene]}
+              selectedCharacter={selectedCharacter}
+              searchQuery={searchOpen && !rehearsalActive ? searchQuery : ""}
+              activeMatchLineId={rehearsalLineId || searchMatches[activeMatchIdx]?.lineId || null}
+              highlightStyle={rehearsalLineId ? "rehearsal" : "search"}
+              zoom={zoom}
             />
           </div>
         )}
