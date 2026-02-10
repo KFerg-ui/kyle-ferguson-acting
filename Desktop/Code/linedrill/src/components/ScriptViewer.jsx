@@ -107,7 +107,7 @@ function HighlightText({ text, query, isActive }) {
   );
 }
 
-export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search", zoom = 1.0 }) {
+export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search", zoom = 1.0, onLineClick }) {
   const scrollRef = useRef(null);
   const activeLineRef = useRef(null);
   const isRehearsal = highlightStyle === "rehearsal";
@@ -166,12 +166,18 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
         // Stage direction / action block
         if (line.type === "direction") {
           return (
-            <div key={line.id} ref={isActiveMatch ? activeLineRef : null} style={{
-              fontStyle: "italic", color: "#bbb", fontSize: z(15), lineHeight: 1.75,
-              padding: "8px 16px", marginBottom: 14, whiteSpace: "pre-wrap",
-              background: directionBg(isActiveMatch), borderRadius: 4,
-              transition: "background 0.2s ease",
-            }}>
+            <div key={line.id} ref={isActiveMatch ? activeLineRef : null}
+              onClick={() => onLineClick && onLineClick(line.id)}
+              style={{
+                fontStyle: "italic", color: "#bbb", fontSize: z(15), lineHeight: 1.75,
+                padding: "8px 16px", marginBottom: 14, whiteSpace: "pre-wrap",
+                background: directionBg(isActiveMatch), borderRadius: 4,
+                transition: "background 0.2s ease",
+                cursor: onLineClick ? "pointer" : "default",
+              }}
+              onMouseEnter={(e) => { if (onLineClick) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+              onMouseLeave={(e) => { if (onLineClick) e.currentTarget.style.background = directionBg(isActiveMatch); }}
+            >
               <HighlightText text={line.text} query={hasMatch ? searchQuery : ""} isActive={isActiveMatch} />
             </div>
           );
@@ -180,7 +186,16 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
         // Dialogue
         const isMe = line.character === selectedCharacter;
         return (
-          <div key={line.id} ref={isActiveMatch ? activeLineRef : null} style={{ marginBottom: 20 }}>
+          <div key={line.id} ref={isActiveMatch ? activeLineRef : null}
+            onClick={() => onLineClick && onLineClick(line.id)}
+            style={{
+              marginBottom: 20,
+              cursor: onLineClick ? "pointer" : "default",
+              borderRadius: 4, transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => { if (onLineClick) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+            onMouseLeave={(e) => { if (onLineClick) e.currentTarget.style.background = "transparent"; }}
+          >
             {/* Character name - centered, screenplay style */}
             <div style={{
               fontSize: z(14), fontWeight: 700, textTransform: "uppercase",

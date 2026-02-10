@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { isSpeechRecognitionSupported, SpeechToText } from "../lib/speech-to-text";
 import { isSpeechSynthesisSupported, TextToSpeech } from "../lib/text-to-speech";
 import { scoreLine, scoreScene, isLineComplete } from "../lib/scoring";
@@ -17,7 +17,7 @@ const GOLD = "#c9a227";
  *   onLineChange     — (lineId) => void  (tells parent which line to highlight)
  *   onStop           — () => void         (user exited rehearsal)
  */
-export default function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop }) {
+export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop }, ref) {
   const [phase, setPhase] = useState("idle"); // idle | direction | partner | listening | done
   const [lineIndex, setLineIndex] = useState(0);
   const [transcript, setTranscript] = useState("");
@@ -242,13 +242,15 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
 
   // --- Controls ---
 
-  const handleStart = (selectedMode) => {
+  const handleStart = (selectedMode, startIndex = 0) => {
     const m = selectedMode || mode || "standard";
     setMode(m);
     modeRef.current = m;
 
     // Create TTS with appropriate rate
     if (ttsRef.current) ttsRef.current.stop();
+    if (sttRef.current) sttRef.current.abort();
+    if (timerRef.current) clearTimeout(timerRef.current);
     const rate = m === "speed" ? 1.3 : 0.95;
     const tts = new TextToSpeech({ rate });
     tts.warmUp();
@@ -259,6 +261,8 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
     setError("");
     setStartTime(Date.now());
     setDrillTimer(0);
+    setIsPaused(false);
+    pausedRef.current = false;
 
     // Start running timer for speed drill
     if (drillIntervalRef.current) clearInterval(drillIntervalRef.current);
@@ -268,8 +272,19 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
       }, 1000);
     }
 
-    advanceLine(0);
+    advanceLine(startIndex);
   };
+
+  // Expose startFrom for parent components (e.g. clicking a script line)
+  const handleStartRef = useRef(null);
+  handleStartRef.current = handleStart;
+
+  useImperativeHandle(ref, () => ({
+    startFrom: (lineId) => {
+      const idx = sceneRef.current.lines.findIndex((l) => l.id === lineId);
+      if (idx >= 0) handleStartRef.current(modeRef.current || "standard", idx);
+    },
+  }), []);
 
   const handlePause = () => {
     setIsPaused(true);
@@ -435,6 +450,10 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
         mode={mode}
         onRunAgain={handleRunAgain}
         onBack={handleBackToScript}
+        onLineRestart={(lineId) => {
+          const idx = sceneRef.current.lines.findIndex((l) => l.id === lineId);
+          if (idx >= 0) handleStart(modeRef.current || "standard", idx);
+        }}
       />
     );
   }
@@ -541,7 +560,7 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
       </div>
     </div>
   );
-}
+});
 
 // --- Helpers ---
 
@@ -554,7 +573,7 @@ function formatTime(seconds) {
 
 // --- Score Summary ---
 
-function ScoreSummary({ lineScores, lineTimings, startTime, scene, selectedCharacter, mode, onRunAgain, onBack }) {
+function ScoreSummary({ lineScores, lineTimings, startTime, scene, selectedCharacter, mode, onRunAgain, onBack, onLineRestart }) {
   const { aggregate, lineCount, usedLineCount } = scoreScene(lineScores);
   const elapsed = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
   const minutes = Math.floor(elapsed / 60);
@@ -635,16 +654,19 @@ function ScoreSummary({ lineScores, lineTimings, startTime, scene, selectedChara
       {lineScores.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
-            Line Breakdown
+            Line Breakdown <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— click to restart</span>
           </div>
           <div style={{ maxHeight: 200, overflowY: "auto" }}>
             {lineScores.map((ls, i) => {
               const timing = isSpeed && lineTimings[i] ? lineTimings[i] : null;
               return (
-                <div key={i} style={{
+                <div key={i} onClick={() => onLineRestart && onLineRestart(ls.lineId)} style={{
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "6px 0", borderBottom: "1px solid #222",
-                }}>
+                  cursor: onLineRestart ? "pointer" : "default",
+                  borderRadius: 3, transition: "background 0.15s",
+                }} onMouseEnter={(e) => { if (onLineRestart) e.currentTarget.style.background = "rgba(201,162,39,0.08)"; }}
+                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                   <div style={{ flex: 1, fontSize: 12, color: "#aaa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {ls.expected.substring(0, 50)}{ls.expected.length > 50 ? "..." : ""}
                   </div>

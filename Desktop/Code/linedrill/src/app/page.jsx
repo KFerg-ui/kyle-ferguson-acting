@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import DropZone from "../components/DropZone";
 import StepIndicator from "../components/StepIndicator";
 import CharacterStep from "../components/CharacterStep";
@@ -36,6 +36,7 @@ export default function HomePage() {
   const [rehearsalLineId, setRehearsalLineId] = useState(null);
   const [rehearsalActive, setRehearsalActive] = useState(false);
   const [zoom, setZoom] = useState(1.0);
+  const rehearsalRef = useRef(null);
 
   // Build flat list of matches across all scenes
   const searchMatches = useMemo(() => {
@@ -281,6 +282,7 @@ export default function HomePage() {
               selectedCharacter={selectedCharacter}
             />
             <RehearsalEngine
+              ref={rehearsalRef}
               scene={finalScenes[activeScene]}
               selectedCharacter={selectedCharacter}
               onLineChange={(id) => {
@@ -300,6 +302,7 @@ export default function HomePage() {
               activeMatchLineId={rehearsalLineId || searchMatches[activeMatchIdx]?.lineId || null}
               highlightStyle={rehearsalLineId ? "rehearsal" : "search"}
               zoom={zoom}
+              onLineClick={(lineId) => rehearsalRef.current?.startFrom(lineId)}
             />
           </div>
         )}
