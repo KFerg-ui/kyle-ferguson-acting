@@ -327,6 +327,42 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
     setTimeout(() => handleStart(currentMode), 100);
   };
 
+  const handleSkipToCue = () => {
+    const s = sceneRef.current;
+    let searchFrom = lineIndexRef.current + 1;
+
+    // If currently on user's own line, skip past consecutive user lines first
+    const curLine = s.lines[lineIndexRef.current];
+    if (curLine && curLine.type === "dialogue" && curLine.character === selectedCharacter) {
+      while (searchFrom < s.lines.length) {
+        const l = s.lines[searchFrom];
+        if (l.type !== "dialogue" || l.character !== selectedCharacter) break;
+        searchFrom++;
+      }
+    }
+
+    // Find next user line after non-user lines
+    let nextUserIdx = -1;
+    for (let i = searchFrom; i < s.lines.length; i++) {
+      if (s.lines[i].type === "dialogue" && s.lines[i].character === selectedCharacter) {
+        nextUserIdx = i;
+        break;
+      }
+    }
+
+    if (nextUserIdx === -1) return; // No more user lines ahead
+
+    // Cue = line right before user's next line
+    const cueIdx = nextUserIdx > 0 ? nextUserIdx - 1 : 0;
+
+    // Stop current TTS/STT/timers
+    if (ttsRef.current) ttsRef.current.stop();
+    if (sttRef.current) sttRef.current.abort();
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    advanceLineRef.current(cueIdx);
+  };
+
   const handleBackToScript = () => {
     setPhase("idle");
     setLineIndex(0);
@@ -494,6 +530,10 @@ export default function RehearsalEngine({ scene, selectedCharacter, onLineChange
             <span>Pause</span>
           </button>
         )}
+        <button onClick={handleSkipToCue} style={btnControl} title="Skip to your next cue">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#aaa" stroke="none"><polygon points="3 5 13 12 3 19"/><polygon points="11 5 21 12 11 19"/></svg>
+          <span>Skip to Cue</span>
+        </button>
         <button onClick={handleStop} style={btnControl}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="#aaa" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
           <span>Stop</span>
