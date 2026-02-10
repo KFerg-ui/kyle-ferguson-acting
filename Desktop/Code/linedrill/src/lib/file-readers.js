@@ -50,7 +50,18 @@ export async function readPDF(file) {
     );
   }
 
-  return text;
+  // Strip page numbers — bare numbers, "Page N", "- N -", etc.
+  // These are PDF rendering artifacts that pollute dialogue lines.
+  const cleaned = text.split("\n").filter(line => {
+    const t = line.trim();
+    if (!t) return true;
+    if (/^\d{1,4}$/.test(t)) return false;
+    if (/^page\s+\d+/i.test(t)) return false;
+    if (/^-\s*\d{1,4}\s*-$/.test(t)) return false;
+    return true;
+  }).join("\n");
+
+  return cleaned;
 }
 
 export async function readDOCX(file) {

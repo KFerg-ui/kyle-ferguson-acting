@@ -74,6 +74,9 @@ export function localParseScript(rawText) {
     }
     if (isBreak) continue;
 
+    // Skip residual page numbers (bare numbers that survived extraction cleanup)
+    if (/^\d{1,4}$/.test(trimmed)) continue;
+
     // Stage directions in brackets/parens
     if (/^\s*[\[\(]/.test(trimmed) && /[\]\)]\s*$/.test(trimmed)) {
       flush();
