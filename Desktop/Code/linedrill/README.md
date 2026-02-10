@@ -1,6 +1,6 @@
 # 🎭 LineDrill — Your AI Scene Partner
 
-An AI-powered line rehearsal app for actors. Upload a script, identify your character, tag your scenes, and (coming soon) drill your lines with voice-driven rehearsal and real-time scoring.
+An AI-powered line rehearsal app for actors. Upload a script, identify your character, tag your scenes, and drill your lines with voice-driven rehearsal and real-time scoring.
 
 ---
 
@@ -29,9 +29,9 @@ npm run dev
 
 ---
 
-## Current Status: Phase 1 ✅
+## Current Status: Phase 1 + Phase 2 Slice 1
 
-Phase 1 is complete and covers script upload, parsing, and scene management:
+Phase 1 (script upload, parsing, scene management) and Phase 2 Slice 1 (voice rehearsal with browser APIs) are complete.
 
 ### What Works Now
 
@@ -49,8 +49,18 @@ Phase 1 is complete and covers script upload, parsing, and scene management:
    - Character names centered in ALL CAPS
    - Your lines highlighted with gold accent
    - Stage directions in italicized blocks
-   - Scene navigation tabs with line counts
+   - Scene navigation tabs with user-defined scene titles and line counts
    - Stats: total lines, words, and scenes for your character
+   - Search (Cmd+F) with cross-scene navigation and match highlighting
+7. **Voice Rehearsal** (Chrome/Edge) — Drill your lines with voice:
+   - Stage directions display briefly, then auto-advance
+   - Partner lines read aloud via browser SpeechSynthesis
+   - Your lines: mic activates, listens via Web Speech API, scores in real-time
+   - Say "line" to hear your line read back (costs 7 points)
+   - Early completion detection: advances as soon as you finish your line
+   - End-of-scene score summary with per-line breakdown and trouble spots
+   - Pause/resume and stop controls
+   - Progress tracking: best score, average, run count per scene (localStorage)
 
 ---
 
@@ -67,12 +77,17 @@ linedrill/
 │   │   ├── StepIndicator.jsx   # Progress dots (Script → Character → Scenes → View)
 │   │   ├── CharacterStep.jsx   # Character selection grid
 │   │   ├── SceneTaggingStep.jsx # Interactive scene break confirmation
-│   │   └── ScriptViewer.jsx    # Screenplay-formatted script display + stats + nav
+│   │   ├── ScriptViewer.jsx    # Screenplay display + search + scene nav + stats
+│   │   └── RehearsalEngine.jsx # Voice rehearsal: TTS, STT, scoring, progress
 │   ├── lib/
 │   │   ├── ai-parser.js        # Claude Sonnet API integration for script analysis
 │   │   ├── local-parser.js     # Regex fallback parser + merge logic
 │   │   ├── file-readers.js     # PDF (pdfjs-dist), DOCX (mammoth), TXT readers
-│   │   └── scene-helpers.js    # Scene building, preview, and dialogue extraction
+│   │   ├── scene-helpers.js    # Scene building, preview, and dialogue extraction
+│   │   ├── scoring.js          # Word-level Levenshtein, line/scene scoring
+│   │   ├── text-to-speech.js   # SpeechSynthesis wrapper (partner lines)
+│   │   ├── speech-to-text.js   # Web Speech API wrapper (user lines)
+│   │   └── progress-store.js   # localStorage rehearsal history
 │   └── styles/
 │       └── globals.css         # Tailwind directives + custom animations
 ├── .env.example                # Environment variable template
@@ -111,56 +126,40 @@ Currently, the Anthropic API key is exposed client-side via `NEXT_PUBLIC_*`. For
 
 ---
 
-## Phase 2 Roadmap: Rehearsal Engine
+## Phase 2: Rehearsal Engine
 
-The next phase adds voice-driven line drilling. Here's the plan:
+### Slice 1: Browser-Only Voice Rehearsal (Complete)
 
-### New Dependencies (Phase 2)
+Uses free browser APIs — no external services or API costs:
+- **SpeechSynthesis** (TTS) for reading partner lines aloud
+- **Web Speech API** (STT) for listening to your lines (Chrome/Edge only)
+- **Levenshtein scoring** for real-time accuracy feedback
+- **localStorage** for progress persistence
 
-| Service | Purpose | Monthly Cost (~45 min/day) |
-|---------|---------|---------------------------|
-| [Deepgram](https://deepgram.com) | Speech-to-text (your lines) | ~$3/mo |
-| [ElevenLabs](https://elevenlabs.io) | Text-to-speech (other characters) | ~$22/mo |
-| *or* Web Speech API + Google TTS | Free/cheap alternative | ~$5/mo total |
+#### How Rehearsal Works
 
-### Rehearsal Flow
+1. Select a scene, tap "Start Rehearsal"
+2. Stage directions display briefly (timed by word count), auto-advance
+3. Partner lines read aloud via SpeechSynthesis, auto-advance
+4. Your lines: mic activates, live transcript shown, scored against script
+5. Say "line" to hear your line read back (-7 point penalty)
+6. Early completion: advances as soon as your last words match the script
+7. End of scene: score summary with per-line breakdown and trouble spots
 
-1. Select a scene → tap "Start Rehearsal"
-2. App reads other characters' lines aloud (TTS with distinct voices per character)
-3. After ~1.5s pause → mic activates, listens for your line
-4. Speech-to-text transcribes your words in real-time
-5. Scoring engine compares transcription to script text
-6. If you say "line" → app reads your next line, deducts 7 points, marks the spot
-7. At scene end → score summary with problem spots highlighted
+#### Scoring
 
-### Scoring System
+- Word-level Levenshtein distance → 0-100% per line
+- "line" calls: -7 point penalty each
+- Aggregate scene score weighted by line count
 
-- Start at **100%** for each scene run
-- **-1 point** per missed/wrong word
-- **-5 points** per skipped phrase or sentence
-- **-7 points** per "line" call
-- Uses fuzzy string matching (Levenshtein distance) to distinguish single-word misses from skipped phrases
+### Slice 2+ Roadmap (Not Started)
 
-### Progress Tracking
-
-- Per-scene stats: best run, most recent run, average across all attempts
-- Trouble spot tracking: lines where you consistently lose points
-- All stored in browser localStorage (or a database for multi-device sync)
-
-### Phase 2 Files to Create
-
-```
-src/
-├── components/
-│   ├── RehearsalEngine.jsx     # Main rehearsal UI and flow control
-│   ├── ScoreDisplay.jsx        # Real-time and end-of-scene scoring
-│   └── ProgressDashboard.jsx   # Per-scene progress tracking
-├── lib/
-│   ├── speech-to-text.js       # Deepgram or Web Speech API integration
-│   ├── text-to-speech.js       # ElevenLabs or Google TTS integration
-│   ├── scoring.js              # Word comparison, Levenshtein distance, point calculation
-│   └── progress-store.js       # localStorage or DB-backed session tracking
-```
+| Upgrade | Purpose | Benefit |
+|---------|---------|---------|
+| [Deepgram](https://deepgram.com) STT | Replace Web Speech API | Better accuracy, works in all browsers |
+| [ElevenLabs](https://elevenlabs.io) TTS | Replace SpeechSynthesis | Higher quality, distinct character voices |
+| Cue-only mode | Hide your lines entirely | Harder rehearsal mode |
+| Multi-device sync | Supabase or similar | Progress available on any device |
 
 ---
 

@@ -124,6 +124,22 @@ export function localParseScript(rawText) {
       continue;
     }
 
+    // Likely continuation after a page break — if the last entry was dialogue
+    // and either: this line starts lowercase (mid-sentence) or the previous
+    // dialogue ended without terminal punctuation (period, !, ?)
+    const lastEntry = dialogueEntries[dialogueEntries.length - 1];
+    const startsLower = /^[a-z]/.test(trimmed);
+    const lastEndsMidSentence = lastEntry?.type === "dialogue" &&
+      !/[.!?…"')\]]$/.test(lastEntry.text.trim());
+    if (lastEntry?.type === "dialogue" && (startsLower || lastEndsMidSentence)) {
+      // Reopen the dialogue so subsequent lines also merge
+      currentCharacter = lastEntry.character;
+      currentDialogue = lastEntry.text + " " + trimmed;
+      currentLineIdx = lastEntry.srcLine;
+      dialogueEntries.pop();
+      continue;
+    }
+
     // Unattributed text = stage direction
     dialogueEntries.push({ type: "direction", text: trimmed, srcLine: i });
   }

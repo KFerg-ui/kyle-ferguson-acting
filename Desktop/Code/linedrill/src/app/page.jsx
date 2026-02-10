@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import DropZone from "../components/DropZone";
 import StepIndicator from "../components/StepIndicator";
 import CharacterStep from "../components/CharacterStep";
 import SceneTaggingStep from "../components/SceneTaggingStep";
-import { SceneNav, ScriptViewer, ScriptStats } from "../components/ScriptViewer";
+import { SceneNav, ScriptViewer, ScriptStats, SearchBar } from "../components/ScriptViewer";
+import RehearsalEngine from "../components/RehearsalEngine";
 
 import { readScriptFile } from "../lib/file-readers";
 import { analyzeScriptWithAI } from "../lib/ai-parser";
@@ -29,6 +30,64 @@ export default function HomePage() {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [rehearsalLineId, setRehearsalLineId] = useState(null);
+  const [rehearsalActive, setRehearsalActive] = useState(false);
+
+  // Build flat list of matches across all scenes
+  const searchMatches = useMemo(() => {
+    if (!searchQuery.trim() || finalScenes.length === 0) return [];
+    const q = searchQuery.toLowerCase();
+    const matches = [];
+    finalScenes.forEach((scene, sceneIdx) => {
+      scene.lines.forEach((line, lineIdx) => {
+        if (line.text.toLowerCase().includes(q)) {
+          matches.push({ sceneIdx, lineIdx, lineId: line.id });
+        }
+      });
+    });
+    return matches;
+  }, [searchQuery, finalScenes]);
+
+  // Clamp activeMatchIdx when matches change
+  useEffect(() => {
+    if (searchMatches.length === 0) setActiveMatchIdx(0);
+    else if (activeMatchIdx >= searchMatches.length) setActiveMatchIdx(0);
+  }, [searchMatches, activeMatchIdx]);
+
+  // Auto-switch scene when active match is in a different scene
+  useEffect(() => {
+    if (searchMatches.length > 0 && searchMatches[activeMatchIdx]) {
+      const match = searchMatches[activeMatchIdx];
+      if (match.sceneIdx !== activeScene) setActiveScene(match.sceneIdx);
+    }
+  }, [activeMatchIdx, searchMatches, activeScene]);
+
+  // Cmd+F / Ctrl+F to open search
+  useEffect(() => {
+    if (step !== "view") return;
+    const handleKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [step]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setActiveMatchIdx(0);
+  };
+
+  const goToMatch = (dir) => {
+    if (searchMatches.length === 0) return;
+    setActiveMatchIdx((prev) => (prev + dir + searchMatches.length) % searchMatches.length);
+  };
 
   const handleFileSelect = useCallback(async (file) => {
     setIsLoading(true);
@@ -178,21 +237,63 @@ export default function HomePage() {
               <div style={{ fontSize: 12, color: "#888" }}>
                 Playing: <span style={{ color: GOLD, fontWeight: 700 }}>{selectedCharacter}</span>
               </div>
-              <button onClick={() => setStep("tag")} style={BTN_SMALL}>Edit Scenes</button>
+              {!rehearsalActive && (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setSearchOpen((o) => !o)} style={BTN_SMALL} title="Search script (Cmd+F)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => setStep("tag")} style={BTN_SMALL}>Edit Scenes</button>
+                </div>
+              )}
             </div>
+
+            {searchOpen && !rehearsalActive && (
+              <SearchBar
+                query={searchQuery}
+                onQueryChange={(q) => { setSearchQuery(q); setActiveMatchIdx(0); }}
+                matchCount={searchMatches.length}
+                activeMatchIdx={activeMatchIdx}
+                onNext={() => goToMatch(1)}
+                onPrev={() => goToMatch(-1)}
+                onClose={closeSearch}
+              />
+            )}
 
             <ScriptStats scenes={finalScenes} selectedCharacter={selectedCharacter} />
-            <SceneNav scenes={finalScenes} activeScene={activeScene} onSelect={setActiveScene} selectedCharacter={selectedCharacter} />
-            <ScriptViewer scene={finalScenes[activeScene]} selectedCharacter={selectedCharacter} />
+            <SceneNav
+              scenes={finalScenes}
+              activeScene={activeScene}
+              onSelect={(idx) => {
+                if (rehearsalActive) {
+                  setRehearsalLineId(null);
+                  setRehearsalActive(false);
+                }
+                setActiveScene(idx);
+              }}
+              selectedCharacter={selectedCharacter}
+            />
+            <ScriptViewer
+              scene={finalScenes[activeScene]}
+              selectedCharacter={selectedCharacter}
+              searchQuery={searchOpen && !rehearsalActive ? searchQuery : ""}
+              activeMatchLineId={rehearsalLineId || searchMatches[activeMatchIdx]?.lineId || null}
+              highlightStyle={rehearsalLineId ? "rehearsal" : "search"}
+            />
 
-            {/* Phase 2 placeholder */}
-            <div style={{
-              marginTop: 24, textAlign: "center", padding: "16px",
-              border: "1px dashed #444", borderRadius: 6,
-            }}>
-              <p style={{ fontSize: 13, color: GOLD, fontWeight: 700, marginBottom: 3 }}>🎙️ REHEARSAL MODE</p>
-              <p style={{ color: "#777", fontSize: 11 }}>Voice-driven line drilling — Phase 2</p>
-            </div>
+            <RehearsalEngine
+              scene={finalScenes[activeScene]}
+              selectedCharacter={selectedCharacter}
+              onLineChange={(id) => {
+                setRehearsalLineId(id);
+                setRehearsalActive(!!id);
+              }}
+              onStop={() => {
+                setRehearsalLineId(null);
+                setRehearsalActive(false);
+              }}
+            />
           </div>
         )}
       </div>
