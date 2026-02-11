@@ -12,6 +12,7 @@ import { readScriptFile } from "../lib/file-readers";
 import { analyzeScriptWithAI } from "../lib/ai-parser";
 import { localParseScript, mergeResults } from "../lib/local-parser";
 import { buildFinalScenes } from "../lib/scene-helpers";
+import { loadSession, saveSession, clearSession } from "../lib/session-store";
 
 const GOLD = "#c9a227";
 const BTN_SMALL = {
@@ -36,7 +37,30 @@ export default function HomePage() {
   const [rehearsalLineId, setRehearsalLineId] = useState(null);
   const [rehearsalActive, setRehearsalActive] = useState(false);
   const [zoom, setZoom] = useState(1.0);
+  const [hasMounted, setHasMounted] = useState(false);
   const rehearsalRef = useRef(null);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const saved = loadSession();
+    if (saved) {
+      if (saved.step) setStep(saved.step);
+      if (saved.rawText) setRawText(saved.rawText);
+      if (saved.parsed) setParsed(saved.parsed);
+      if (saved.selectedCharacter) setSelectedCharacter(saved.selectedCharacter);
+      if (saved.finalScenes?.length) setFinalScenes(saved.finalScenes);
+      if (saved.fileName) setFileName(saved.fileName);
+      if (saved.zoom) setZoom(saved.zoom);
+    }
+    setHasMounted(true);
+  }, []);
+
+  // Auto-save session whenever key state changes
+  useEffect(() => {
+    if (!hasMounted) return;
+    if (step === "upload" && !rawText) return;
+    saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom });
+  }, [step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hasMounted]);
 
   // Build flat list of matches across all scenes
   const searchMatches = useMemo(() => {
@@ -148,6 +172,7 @@ export default function HomePage() {
   }, []);
 
   const reset = () => {
+    clearSession();
     setStep("upload");
     setParsed(null);
     setSelectedCharacter("");
@@ -157,6 +182,24 @@ export default function HomePage() {
     setError("");
     setRawText("");
   };
+
+  // Show minimal shell until localStorage restore completes (avoids SSR hydration flash)
+  if (!hasMounted) {
+    return (
+      <div style={{ minHeight: "100vh" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px" }}>
+          <header style={{ textAlign: "center" }}>
+            <h1 style={{
+              fontSize: 32, fontWeight: 700, color: GOLD,
+              letterSpacing: "0.18em", textTransform: "uppercase",
+            }}>
+              LineDrill
+            </h1>
+          </header>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh" }}>
