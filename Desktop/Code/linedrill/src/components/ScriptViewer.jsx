@@ -107,7 +107,7 @@ function HighlightText({ text, query, isActive }) {
   );
 }
 
-export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search", zoom = 1.0, onLineClick }) {
+export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activeMatchLineId = null, highlightStyle = "search", zoom = 1.0, hideMyLines = false, onLineClick }) {
   const scrollRef = useRef(null);
   const activeLineRef = useRef(null);
   const isRehearsal = highlightStyle === "rehearsal";
@@ -213,14 +213,17 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
             {/* Dialogue text */}
             <div style={{
               fontSize: z(16), lineHeight: 1.75, maxWidth: 500, margin: "0 auto",
-              color: isMe ? "#fff" : "#ddd",
+              color: isMe && hideMyLines ? "#555" : isMe ? "#fff" : "#ddd",
               padding: isMe ? "5px 14px" : "2px 14px",
               background: dialogueBg(isActiveMatch, isMe),
               borderLeft: dialogueBorder(isActiveMatch, isMe),
               borderRadius: isMe ? "0 3px 3px 0" : 0,
               transition: "background 0.2s ease, border-left 0.2s ease",
             }}>
-              <HighlightText text={line.text} query={hasMatch ? searchQuery : ""} isActive={isActiveMatch} />
+              {isMe && hideMyLines
+                ? <span style={{ letterSpacing: "0.25em" }}>{"_ ".repeat(Math.min(Math.ceil(line.text.split(/\s+/).length / 2), 12)).trim()}</span>
+                : <HighlightText text={line.text} query={hasMatch ? searchQuery : ""} isActive={isActiveMatch} />
+              }
             </div>
           </div>
         );

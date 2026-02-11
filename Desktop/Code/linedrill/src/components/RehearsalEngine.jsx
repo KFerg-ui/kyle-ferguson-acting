@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { isSpeechRecognitionSupported, SpeechToText } from "../lib/speech-to-text";
+import { DeepgramSTT } from "../lib/speech-to-text-deepgram";
 import { isSpeechSynthesisSupported, TextToSpeech } from "../lib/text-to-speech";
 import { scoreLine, scoreScene, isLineComplete } from "../lib/scoring";
 import { saveRun, getSceneStats } from "../lib/progress-store";
@@ -18,7 +19,7 @@ const GOLD = "#c9a227";
  *   onLineChange     — (lineId) => void  (tells parent which line to highlight)
  *   onStop           — () => void         (user exited rehearsal)
  */
-export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop, voiceMap, characterMeta }, ref) {
+export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop, voiceMap, characterMeta, deepgramKey }, ref) {
   const [phase, setPhase] = useState("idle"); // idle | direction | partner | listening | done
   const [lineIndex, setLineIndex] = useState(0);
   const [transcript, setTranscript] = useState("");
@@ -49,6 +50,10 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   const recordScoreRef = useRef(null);
   const voiceMapRef = useRef(voiceMap);
   const characterMetaRef = useRef(characterMeta);
+  const epochRef = useRef(0);
+  const cueOnlyRef = useRef(false);
+  const [cueSnippet, setCueSnippet] = useState(null);
+  const deepgramKeyRef = useRef(deepgramKey);
 
   // Keep refs in sync with state
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
@@ -58,14 +63,16 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   useEffect(() => { sceneRef.current = scene; }, [scene]);
   useEffect(() => { voiceMapRef.current = voiceMap; }, [voiceMap]);
   useEffect(() => { characterMetaRef.current = characterMeta; }, [characterMeta]);
+  useEffect(() => { deepgramKeyRef.current = deepgramKey; }, [deepgramKey]);
 
-  // Check browser support
+  // Check browser support — Deepgram works everywhere, browser STT is Chrome/Edge only
   useEffect(() => {
-    setSttSupported(isSpeechRecognitionSupported());
-  }, []);
+    setSttSupported(!!deepgramKey || isSpeechRecognitionSupported());
+  }, [deepgramKey]);
 
   // Reset when scene changes (e.g. user switches tabs mid-rehearsal)
   useEffect(() => {
+    epochRef.current += 1;
     if (ttsRef.current) ttsRef.current.stop();
     if (sttRef.current) sttRef.current.abort();
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -99,6 +106,7 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   // --- Core stepper ---
 
   const advanceLine = useCallback((index) => {
+    const epoch = epochRef.current;
     const s = sceneRef.current;
     if (index >= s.lines.length) {
       setPhase("done");
@@ -118,32 +126,54 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
     setTranscript("");
     setLiveScore(null);
     setUsedLineThisTurn(false);
+    setCueSnippet(null);
     onLineChange(line.id);
 
     if (line.type === "direction") {
       setPhase("direction");
       const isSpeed = modeRef.current === "speed";
       const delay = isSpeed ? 1000 : Math.max(1500, line.text.split(/\s+/).length * 300);
-      timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
+      timerRef.current = setTimeout(() => {
+        if (epochRef.current !== epoch) return;
+        advanceLineRef.current(index + 1);
+      }, delay);
     } else if (line.character !== selectedCharacter) {
       setPhase("partner");
       const isSpeed = modeRef.current === "speed";
+
+      // If skipping to cue, only speak the last sentence (the actual cue)
+      let speakText = line.text;
+      if (cueOnlyRef.current) {
+        const snippet = extractCue(line.text);
+        speakText = snippet;
+        setCueSnippet(snippet);
+        cueOnlyRef.current = false;
+      }
+
       if (ttsRef.current) {
         const charVoice = voiceMapRef.current?.[line.character] || null;
         const charPitch = getPitchForCharacter(characterMetaRef.current, line.character);
-        ttsRef.current.speak(line.text, { voice: charVoice, pitch: charPitch }).then(() => {
-          if (!pausedRef.current) advanceLineRef.current(index + 1);
+        ttsRef.current.speak(speakText, { voice: charVoice, pitch: charPitch }).then(() => {
+          if (epochRef.current !== epoch || pausedRef.current) return;
+          advanceLineRef.current(index + 1);
         }).catch(() => {
+          if (epochRef.current !== epoch) return;
           const delay = isSpeed
             ? Math.max(800, line.text.split(/\s+/).length * 200)
             : Math.max(1500, line.text.split(/\s+/).length * 300);
-          timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
+          timerRef.current = setTimeout(() => {
+            if (epochRef.current !== epoch) return;
+            advanceLineRef.current(index + 1);
+          }, delay);
         });
       } else {
         const delay = isSpeed
           ? Math.max(800, line.text.split(/\s+/).length * 200)
           : Math.max(1500, line.text.split(/\s+/).length * 300);
-        timerRef.current = setTimeout(() => advanceLineRef.current(index + 1), delay);
+        timerRef.current = setTimeout(() => {
+          if (epochRef.current !== epoch) return;
+          advanceLineRef.current(index + 1);
+        }, delay);
       }
     } else {
       // User's line — listen
@@ -157,7 +187,7 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   const startListening = useCallback((line, index) => {
     if (sttRef.current) sttRef.current.abort();
 
-    const stt = new SpeechToText({
+    const callbacks = {
       onInterim: (t) => {
         setTranscript(t);
         // Check for "line" command
@@ -183,12 +213,17 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
         setError(err);
         setPhase("idle");
       },
-    });
+    };
+
+    const stt = deepgramKeyRef.current
+      ? new DeepgramSTT({ ...callbacks, deepgramKey: deepgramKeyRef.current })
+      : new SpeechToText(callbacks);
     sttRef.current = stt;
     stt.start();
   }, []);
 
   const handleLineCommand = useCallback((line, index) => {
+    const epoch = epochRef.current;
     if (sttRef.current) sttRef.current.abort();
     setUsedLineThisTurn(true);
     setTranscript("");
@@ -197,11 +232,12 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
     // Read the line to the user
     if (ttsRef.current) {
       ttsRef.current.speak(line.text).then(() => {
-        // Re-listen after reading
+        if (epochRef.current !== epoch) return;
         if (phaseRef.current === "listening" && !pausedRef.current) {
           startListening(line, index);
         }
       }).catch(() => {
+        if (epochRef.current !== epoch) return;
         if (phaseRef.current === "listening" && !pausedRef.current) {
           startListening(line, index);
         }
@@ -210,6 +246,8 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   }, [startListening]);
 
   const recordScore = useCallback((line, spoken, score, index) => {
+    const epoch = epochRef.current;
+
     // Capture per-line response time
     const responseTime = cueEndTimeRef.current
       ? Math.round(((Date.now() - cueEndTimeRef.current) / 1000) * 10) / 10
@@ -242,6 +280,7 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
     // Shorter inter-line delay for speed drill
     const advanceDelay = modeRef.current === "speed" ? 400 : 800;
     timerRef.current = setTimeout(() => {
+      if (epochRef.current !== epoch) return;
       advanceLineRef.current(index + 1);
     }, advanceDelay);
   }, [usedLineThisTurn]);
@@ -250,6 +289,7 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   // --- Controls ---
 
   const handleStart = (selectedMode, startIndex = 0) => {
+    epochRef.current += 1;
     const m = selectedMode || mode || "standard";
     setMode(m);
     modeRef.current = m;
@@ -308,18 +348,24 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   const handleResume = () => {
     setIsPaused(false);
     pausedRef.current = false;
-    if (ttsRef.current) ttsRef.current.resume();
     // Restart drill timer if speed mode
     if (modeRef.current === "speed") {
       drillIntervalRef.current = setInterval(() => {
         setDrillTimer((prev) => prev + 1);
       }, 1000);
     }
-    // Re-advance from current line
-    advanceLine(lineIndexRef.current);
+    if (phaseRef.current === "partner") {
+      // Just resume the paused TTS — the existing .then() chain will advance when it finishes
+      if (ttsRef.current) ttsRef.current.resume();
+    } else {
+      // For direction or listening phases, invalidate stale callbacks and re-advance
+      epochRef.current += 1;
+      advanceLine(lineIndexRef.current);
+    }
   };
 
   const handleStop = () => {
+    epochRef.current += 1;
     if (ttsRef.current) ttsRef.current.stop();
     if (sttRef.current) sttRef.current.abort();
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -350,6 +396,7 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   };
 
   const handleSkipToCue = () => {
+    epochRef.current += 1;
     const s = sceneRef.current;
     let searchFrom = lineIndexRef.current + 1;
 
@@ -382,6 +429,8 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
     if (sttRef.current) sttRef.current.abort();
     if (timerRef.current) clearTimeout(timerRef.current);
 
+    // Tell advanceLine to only speak the last sentence of the cue line
+    cueOnlyRef.current = true;
     advanceLineRef.current(cueIdx);
   };
 
@@ -403,10 +452,10 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
       <div style={panelStyle}>
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <div style={{ fontSize: 13, color: "#888", marginBottom: 6 }}>
-            Voice rehearsal requires Chrome or Edge.
+            Voice rehearsal requires microphone access.
           </div>
           <div style={{ fontSize: 11, color: "#666" }}>
-            Speech recognition is not available in this browser.
+            Speech recognition is not available in this browser. Try Chrome or Edge.
           </div>
         </div>
       </div>
@@ -505,8 +554,12 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
           {phase === "partner" && (
             <>
               <div style={{ fontSize: 10, color: "#888", textTransform: "uppercase", marginBottom: 4 }}>{currentLine.character}</div>
-              <div style={{ fontSize: 13, color: "#ddd" }}>{currentLine.text}</div>
-              <div style={{ fontSize: 10, color: GOLD, marginTop: 6 }}>Speaking...</div>
+              <div style={{ fontSize: 13, color: "#ddd" }}>
+                {cueSnippet ? <>
+                  <span style={{ color: "#666" }}>...</span>{cueSnippet}
+                </> : currentLine.text}
+              </div>
+              <div style={{ fontSize: 10, color: GOLD, marginTop: 6 }}>{cueSnippet ? "Cue" : "Speaking..."}</div>
             </>
           )}
           {phase === "listening" && (
@@ -570,6 +623,19 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
 });
 
 // --- Helpers ---
+
+/** Extract the last sentence/phrase from a speech — the actor's actual cue. */
+function extractCue(text) {
+  // Split on sentence-ending punctuation, keeping the delimiter
+  const parts = text.split(/(?<=[.!?—…])\s+/).filter(Boolean);
+  if (parts.length <= 1) return text;
+  // Return the last sentence; if it's very short (< 4 words), include the one before it
+  const last = parts[parts.length - 1];
+  if (last.split(/\s+/).length < 4 && parts.length >= 2) {
+    return parts[parts.length - 2] + " " + last;
+  }
+  return last;
+}
 
 function formatTime(seconds) {
   if (seconds == null) return "--";

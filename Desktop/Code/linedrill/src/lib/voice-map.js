@@ -5,22 +5,32 @@
 
 import { isSpeechSynthesisSupported } from "./text-to-speech";
 
+// macOS novelty/robotic voices — these sound terrible for dialogue
+const BLOCKED_VOICES = new Set([
+  "agnes", "albert", "bad news", "bahh", "bells", "boing", "bruce",
+  "bubbles", "cellos", "deranged", "fred", "good news", "hysterical",
+  "junior", "jester", "kathy", "organ", "pipe organ", "princess",
+  "ralph", "superstar", "trinoids", "whisper", "wobble", "zarvox",
+]);
+
 // Known voice name → gender map (covers macOS, Windows, Chrome)
+// Only includes voices that sound natural for dialogue
 const KNOWN_VOICES = {
-  // macOS / iOS
+  // macOS / iOS — natural voices
   samantha: "female", karen: "female", moira: "female", victoria: "female",
   tessa: "female", fiona: "female", veena: "female", allison: "female",
   ava: "female", joelle: "female", kate: "female", serena: "female",
-  daniel: "male", alex: "male", fred: "male", tom: "male", oliver: "male",
-  lee: "male", ralph: "male", bruce: "male", junior: "male", albert: "male",
+  shelley: "female", sandy: "female", susan: "female", catherine: "female",
+  daniel: "male", alex: "male", tom: "male", oliver: "male",
+  lee: "male", rishi: "male", jamie: "male", liam: "male", gordon: "male",
   // Windows
-  zira: "female", hazel: "female", susan: "female", catherine: "female",
-  jenny: "female", aria: "female", sara: "female",
+  zira: "female", hazel: "female", jenny: "female", aria: "female", sara: "female",
   david: "male", mark: "male", george: "male", james: "male", richard: "male",
   ryan: "male", guy: "male",
   // Chrome / generic
   "google uk english female": "female",
   "google uk english male": "male",
+  "google us english": "female",
 };
 
 function inferVoiceGender(voiceName) {
@@ -33,6 +43,24 @@ function inferVoiceGender(voiceName) {
   return "unknown";
 }
 
+function isBlockedVoice(voiceName) {
+  const lower = voiceName.toLowerCase();
+  for (const blocked of BLOCKED_VOICES) {
+    // Match exact name or name before parenthetical like "Fred (Enhanced)"
+    if (lower === blocked || lower.startsWith(blocked + " ")) return true;
+  }
+  return false;
+}
+
+function voiceQuality(v) {
+  // Enhanced/Premium variants are higher quality downloads
+  const name = v.name.toLowerCase();
+  if (name.includes("enhanced") || name.includes("premium")) return 3;
+  // Local voices are generally better than cloud
+  if (v.localService) return 2;
+  return 1;
+}
+
 export function classifyVoices() {
   if (!isSpeechSynthesisSupported()) return { female: [], male: [], unknown: [], all: [] };
 
@@ -43,15 +71,19 @@ export function classifyVoices() {
     voice: v,
     gender: inferVoiceGender(v.name),
     local: v.localService,
+    novelty: isBlockedVoice(v.name),
   }));
 
-  // Sort: local voices first (higher quality)
-  const sort = (arr) => arr.sort((a, b) => (b.local ? 1 : 0) - (a.local ? 1 : 0));
+  // Sort: enhanced > local > cloud, novelty voices last
+  const sort = (arr) => arr.sort((a, b) => {
+    if (a.novelty !== b.novelty) return a.novelty ? 1 : -1;
+    return voiceQuality(b.voice) - voiceQuality(a.voice);
+  });
 
   return {
     female: sort(classified.filter((c) => c.gender === "female")),
     male: sort(classified.filter((c) => c.gender === "male")),
-    unknown: classified.filter((c) => c.gender === "unknown"),
+    unknown: sort(classified.filter((c) => c.gender === "unknown")),
     all: sort(classified),
   };
 }
@@ -77,16 +109,18 @@ export function buildVoiceMap(characters, characterMeta, selectedCharacter, over
     let pool;
     let usedSet;
 
+    // Filter out novelty voices for auto-assignment (users can still pick them manually)
+    const naturalOnly = (arr) => arr.filter((p) => !p.novelty);
+
     if (meta.gender === "female" && classified.female.length > 0) {
-      pool = classified.female;
+      pool = naturalOnly(classified.female);
       usedSet = usedFemale;
     } else if (meta.gender === "male" && classified.male.length > 0) {
-      pool = classified.male;
+      pool = naturalOnly(classified.male);
       usedSet = usedMale;
     } else {
-      // Unknown or empty pool — round-robin through all
-      pool = classified.all;
-      usedSet = usedMale; // shared tracker
+      pool = naturalOnly(classified.all);
+      usedSet = usedMale;
     }
 
     const available = pool.filter((p) => !usedSet.has(p.voice.voiceURI));

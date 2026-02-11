@@ -18,6 +18,29 @@ import { TextToSpeech } from "../lib/text-to-speech";
 import { buildVoiceMap, loadVoiceOverrides, saveVoiceOverrides, clearVoiceOverrides } from "../lib/voice-map";
 
 const GOLD = "#c9a227";
+
+function GhostLight({ size = 48 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 80" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", margin: "0 auto 6px" }}>
+      {/* Glow */}
+      <ellipse cx="32" cy="18" rx="18" ry="16" fill={GOLD} opacity="0.08"/>
+      <ellipse cx="32" cy="18" rx="11" ry="10" fill={GOLD} opacity="0.15"/>
+      {/* Bulb */}
+      <ellipse cx="32" cy="16" rx="6.5" ry="9" fill={GOLD} opacity="0.9"/>
+      {/* Socket */}
+      <rect x="28" y="24.5" width="8" height="3.5" rx="1" fill="#666"/>
+      <line x1="29" y1="25.5" x2="35" y2="25.5" stroke="#555" strokeWidth="0.5"/>
+      <line x1="29" y1="27" x2="35" y2="27" stroke="#555" strokeWidth="0.5"/>
+      {/* Pole */}
+      <line x1="32" y1="28" x2="32" y2="60" stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Base tripod */}
+      <line x1="32" y1="60" x2="19" y2="76" stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="32" y1="60" x2="45" y2="76" stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+      <line x1="32" y1="60" x2="32" y2="78" stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 const BTN_SMALL = {
   padding: "4px 12px", borderRadius: 4, border: "1px solid #444",
   background: "transparent", color: "#aaa", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
@@ -43,6 +66,8 @@ export default function HomePage() {
   const [hasMounted, setHasMounted] = useState(false);
   const [voiceMap, setVoiceMap] = useState({});
   const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
+  const [hideMyLines, setHideMyLines] = useState(false);
+  const [deepgramKey, setDeepgramKey] = useState(null);
   const rehearsalRef = useRef(null);
 
   // Restore session from localStorage on mount
@@ -56,6 +81,7 @@ export default function HomePage() {
       if (saved.finalScenes?.length) setFinalScenes(saved.finalScenes);
       if (saved.fileName) setFileName(saved.fileName);
       if (saved.zoom) setZoom(saved.zoom);
+      if (saved.hideMyLines) setHideMyLines(saved.hideMyLines);
     }
     setHasMounted(true);
   }, []);
@@ -64,8 +90,16 @@ export default function HomePage() {
   useEffect(() => {
     if (!hasMounted) return;
     if (step === "upload" && !rawText) return;
-    saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom });
-  }, [step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hasMounted]);
+    saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hideMyLines });
+  }, [step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hideMyLines, hasMounted]);
+
+  // Check if Deepgram STT is available (server has DEEPGRAM_API_KEY)
+  useEffect(() => {
+    fetch("/api/deepgram-token", { method: "POST" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data?.key) setDeepgramKey(data.key); })
+      .catch(() => {}); // No Deepgram — will fall back to browser STT
+  }, []);
 
   // Build voice map when characters and selected character are available
   useEffect(() => {
@@ -208,6 +242,7 @@ export default function HomePage() {
       <div style={{ minHeight: "100vh" }}>
         <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px" }}>
           <header style={{ textAlign: "center" }}>
+            <GhostLight />
             <h1 style={{
               fontSize: 32, fontWeight: 700, color: GOLD,
               letterSpacing: "0.18em", textTransform: "uppercase",
@@ -225,6 +260,7 @@ export default function HomePage() {
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px", animation: "fadeIn 0.4s ease" }}>
         {/* Header */}
         <header style={{ textAlign: "center", marginBottom: 24 }}>
+          <GhostLight />
           <h1 style={{
             fontSize: 32, fontWeight: 700, color: GOLD,
             letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 3,
@@ -321,6 +357,20 @@ export default function HomePage() {
                 <button onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom in">A+</button>
                 {!rehearsalActive && (
                   <>
+                    <button onClick={() => setHideMyLines((h) => !h)} style={{ ...BTN_SMALL, color: hideMyLines ? GOLD : "#aaa" }} title={hideMyLines ? "Show my lines" : "Hide my lines"}>
+                      {hideMyLines ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
                     <button onClick={() => setVoiceSettingsOpen((o) => !o)} style={BTN_SMALL} title="Voice settings">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -391,6 +441,7 @@ export default function HomePage() {
               selectedCharacter={selectedCharacter}
               voiceMap={voiceMap}
               characterMeta={parsed?.characterMeta}
+              deepgramKey={deepgramKey}
               onLineChange={(id) => {
                 setRehearsalLineId(id);
                 setRehearsalActive(!!id);
@@ -408,6 +459,7 @@ export default function HomePage() {
               activeMatchLineId={rehearsalLineId || searchMatches[activeMatchIdx]?.lineId || null}
               highlightStyle={rehearsalLineId ? "rehearsal" : "search"}
               zoom={zoom}
+              hideMyLines={hideMyLines}
               onLineClick={(lineId) => rehearsalRef.current?.startFrom(lineId)}
             />
           </div>

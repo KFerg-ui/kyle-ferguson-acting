@@ -21,9 +21,8 @@ export default function VoiceSettings({
   const classified = useMemo(() => classifyVoices(), []);
 
   const allVoices = useMemo(() => {
-    if (!isSpeechSynthesisSupported()) return [];
-    return speechSynthesis.getVoices().filter((v) => v.lang.startsWith("en"));
-  }, []);
+    return classified.all.map((c) => c.voice);
+  }, [classified]);
 
   const partners = characters.filter((c) => c !== selectedCharacter);
 

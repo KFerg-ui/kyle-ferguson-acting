@@ -26,6 +26,7 @@ export class SpeechToText {
     this._lang = lang;
     this._recognition = null;
     this._stopped = true;
+    this._aborted = false;
     this._transcript = "";
     this._silenceTimer = null;
     this._lastResultTime = 0;
@@ -38,6 +39,7 @@ export class SpeechToText {
     }
 
     this._stopped = false;
+    this._aborted = false;
     this._transcript = "";
     this._lastResultTime = Date.now();
 
@@ -76,7 +78,10 @@ export class SpeechToText {
         try { rec.start(); } catch { /* already started */ }
         return;
       }
-      this._finalize();
+      // Only finalize on graceful stop(), not on abort()
+      if (!this._aborted) {
+        this._finalize();
+      }
     };
 
     this._recognition = rec;
@@ -96,6 +101,7 @@ export class SpeechToText {
 
   abort() {
     this._stopped = true;
+    this._aborted = true;
     this._clearSilenceTimer();
     if (this._recognition) {
       try { this._recognition.abort(); } catch { /* ignore */ }

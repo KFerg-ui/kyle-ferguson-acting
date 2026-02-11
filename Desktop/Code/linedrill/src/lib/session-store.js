@@ -2,7 +2,7 @@
  * Session Store — persists script session state in localStorage.
  *
  * Key: "linedrill:session"
- * Stores: step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom.
+ * Stores: step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hideMyLines.
  * Does NOT store transient UI state (loading, errors, search, rehearsal).
  *
  * Designed so saveSession/loadSession can later be swapped to API calls
@@ -25,7 +25,7 @@ export function loadSession() {
   }
 }
 
-export function saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom }) {
+export function saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hideMyLines }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       version: SCHEMA_VERSION,
@@ -37,6 +37,7 @@ export function saveSession({ step, rawText, parsed, selectedCharacter, finalSce
       finalScenes: finalScenes || [],
       fileName: fileName || "",
       zoom: zoom ?? 1.0,
+      hideMyLines: hideMyLines ?? false,
     }));
   } catch {
     // Quota exceeded or other localStorage failure — silently ignore

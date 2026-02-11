@@ -6,7 +6,7 @@ AI-powered line rehearsal app for actors. Upload a script (PDF/DOCX/TXT), pick y
 ## Tech Stack
 - Next.js 14 (App Router), React 18, Tailwind CSS
 - pdfjs-dist (PDF extraction), mammoth (DOCX extraction)
-- Claude Sonnet API (AI script parsing — client-side, needs server-side migration)
+- Claude Sonnet API (AI script parsing — server-side via `/api/parse` route, `ANTHROPIC_API_KEY`)
 - Font: Courier Prime. Theme: dark (#111) + gold (#c9a227)
 
 ## Architecture
@@ -26,9 +26,11 @@ AI-powered line rehearsal app for actors. Upload a script (PDF/DOCX/TXT), pick y
 
 **Rehearsal support libs:**
 - `scoring.js` — `normalizeForScoring()`, word-level Levenshtein, `scoreLine()`, `isLineComplete()`, `scoreScene()`
-- `text-to-speech.js` — `TextToSpeech` class wrapping SpeechSynthesis. Prefers local English voices, rate 0.95, Chrome/iOS workarounds.
-- `speech-to-text.js` — `SpeechToText` class wrapping Web Speech API. Continuous mode, interim results, auto-restart on unexpected end, silence timeout (8s no results / 4s gap).
+- `text-to-speech.js` — `TextToSpeech` class wrapping SpeechSynthesis. Prefers local English voices, rate 0.95, Chrome/iOS workarounds. `speak()` accepts optional `{ voice, pitch }` overrides per-utterance. `getVoicesAsync()` static method waits for browser voices to load.
+- `speech-to-text.js` — `SpeechToText` class wrapping Web Speech API. Continuous mode, interim results, auto-restart on unexpected end, silence timeout (8s no results / 4s gap). `abort()` discards results silently (`_aborted` flag); `stop()` triggers `onFinal` for graceful completion.
 - `progress-store.js` — localStorage wrapper. Key: `"linedrill:progress"` → `{ [character::sceneLabel]: { runs: [...] } }`. Keeps last 50 runs per scene.
+- `voice-map.js` — Classifies browser TTS voices by gender using hardcoded name→gender map. `buildVoiceMap()` auto-assigns distinct voices to partner characters based on AI-inferred gender/age metadata. Novelty voices (macOS Bahh, Bells, etc.) blocked from auto-assignment but available in manual dropdown. `getPitchForCharacter()` adjusts pitch by age range. Voice overrides persisted to localStorage.
+- `VoiceSettings.jsx` — Settings panel for manually assigning voices to partner characters. Grouped dropdowns (Female/Male/Other), preview button, reset to auto.
 
 ## Critical Implementation Details
 
@@ -42,8 +44,7 @@ Do NOT clear `input.value` in the `onChange` handler — Safari invalidates the 
 Instead, clear it in the `onClick` *before* opening the picker. See `DropZone.jsx:26-31`.
 
 ### API Key Security
-`NEXT_PUBLIC_ANTHROPIC_API_KEY` is exposed client-side. For production, move to a server-side
-API route at `src/app/api/parse/route.js` using `ANTHROPIC_API_KEY` (without NEXT_PUBLIC_).
+API key is server-side only via `src/app/api/parse/route.js` using `ANTHROPIC_API_KEY` env var (no `NEXT_PUBLIC_` prefix). The AI parse prompt also returns character metadata (gender, ageRange, description) for voice assignment.
 
 ### Scene Tagging Guards
 - `finish()` is no-op when 0 scenes confirmed (prevents empty viewer)
@@ -58,6 +59,10 @@ API route at `src/app/api/parse/route.js` using `ANTHROPIC_API_KEY` (without NEX
 - **Early completion**: `isLineComplete()` checks if last 2-3 spoken words match the tail of the expected line AND 70%+ word coverage. Triggers immediate advance instead of waiting for silence timeout.
 - **Progress persistence**: Runs saved to localStorage via `progress-store.js`. Idle state shows per-mode stats (standard: best/avg score; speed: best time + score).
 - **Speed Drill**: Mode selection on idle screen. Speed mode: `TextToSpeech({ rate: 1.3 })`, 1s direction display, 400ms advance delay, running `drillTimer` via `setInterval`, per-line response time via `cueEndTimeRef`. Progress stored under separate `::speed` key. "Run Again" preserves current mode; scene switch/stop resets to mode picker.
+- **Epoch guard pattern**: `epochRef` in RehearsalEngine prevents stale async callbacks. Every "restart point" (start, stop, skip-to-cue, resume, scene change) increments the epoch. All async continuations (TTS `.then()`, direction timeouts, score advance timeouts, line command re-listen) check `epochRef.current !== epoch` before proceeding.
+- **Distinct voices per character**: AI parse route returns `gender`/`ageRange`/`description` per character. `voice-map.js` auto-assigns browser TTS voices by gender pool with round-robin. User can override via VoiceSettings panel (speaker icon in toolbar). Overrides persist to localStorage.
+- **Skip to Cue**: Jumps to the line right before the user's next line and speaks only the last sentence/phrase (the actual theatrical cue). Uses `extractCue()` — splits on sentence-ending punctuation, returns last sentence (or last two if final sentence is < 4 words). Display shows `...snippet` with "Cue" label.
+- **Novelty voice filtering**: macOS novelty voices (Agnes, Bahh, Bells, Cellos, etc.) are tagged with `novelty: true` in `classifyVoices()`. Auto-assignment in `buildVoiceMap()` filters them out. They remain available in the VoiceSettings dropdown for manual selection, sorted last.
 
 ### Parser Continuation Logic
 - PDF page boundaries insert `\n\n` which creates blank lines in the text.
@@ -96,6 +101,18 @@ API route at `src/app/api/parse/route.js` using `ANTHROPIC_API_KEY` (without NEX
 ### Bugs Fixed
 1. **PDF page-break splitting** — long speeches crossing pages were split into stage directions. Fixed: continuation detection in `local-parser.js` checks lowercase start + missing terminal punctuation.
 2. **Parser continuation double-negation** — first fix had `!/regex/.test() === false`, always true. Fixed: simplified to `startsLower || lastEndsMidSentence`.
+3. **Rehearsal race conditions** — `speechSynthesis.cancel()` inside `speak()` resolved old promises via `onerror("interrupted")`, creating parallel advance chains. Lines jumped, repeated, and skipped. Fixed with epoch guard pattern — every async callback checks generation counter before proceeding.
+4. **Stop button not working** — `handleStop` canceled speech which resolved old `.then()` chains, immediately restarting advance. Fixed: increment epoch before stopping.
+5. **Mic listening during partner lines** — stale advance chains from canceled speech called `startListening()` at wrong times. Fixed by epoch guard on all async callbacks.
+6. **`abort()` triggering `onFinal`** — `SpeechToText.abort()` triggered `rec.onend` → `_finalize()` → stale score recording. Fixed: added `_aborted` flag, `rec.onend` skips `_finalize()` when aborted.
+7. **`handleResume` double-starting partner lines** — called both `ttsRef.current.resume()` and `advanceLine(currentLine)` for partner phase, canceling just-resumed speech. Fixed: for partner phase, only resume TTS and let existing `.then()` chain continue.
+8. **Novelty voices auto-assigned** — macOS novelty voices (Bahh, Cellos, Trinoids, etc.) selected for dialogue characters. Fixed: blocklist of 26 voices, filtered from auto-assignment only.
+
+### Features Built (Feb 2026 continued)
+1. **Ghost light icon** — replaced comedy/tragedy masks with inline SVG ghost light (theater tradition). `icon.svg` in `src/app/` serves as favicon via Next.js App Router convention.
+2. **Distinct voices per character** — AI-inferred gender/age metadata, `voice-map.js` with gender-pool auto-assignment, VoiceSettings panel for manual overrides.
+3. **Skip to Cue improvement** — speaks only the last sentence of the partner's speech (the theatrical cue) instead of the entire speech. `extractCue()` helper.
+4. **Click-to-start** — clicking any script line or score breakdown line restarts rehearsal from that point.
 
 ## Phase 2 Status
 
@@ -115,11 +132,19 @@ API route at `src/app/api/parse/route.js` using `ANTHROPIC_API_KEY` (without NEX
 - Progress stored separately per mode (`::standard` / `::speed` key suffix)
 - Legacy key fallback preserves existing standard-mode data
 
-### Slice 3+ (Not Started)
+### Slice 3: Voice & Rehearsal Polish (Complete)
+- Distinct TTS voices per character — AI-inferred gender/age, auto-assigned from browser voice pool
+- VoiceSettings panel — manual voice assignment, preview, reset, novelty voices available but deprioritized
+- Epoch guard — prevents race conditions from async TTS/STT callbacks (parallel advance chains, stale listeners)
+- `abort()` vs `stop()` distinction in SpeechToText — abort discards, stop finalizes
+- Skip to Cue improvement — speaks only last sentence/phrase (the actual theatrical cue)
+- Ghost light favicon and inline SVG icon
+- Click-to-start from any script line or score breakdown line
+
+### Slice 4+ (Not Started)
+- Hide My Lines mode (toggle to hide user's dialogue text in script display — planned, see plan below)
 - Deepgram STT for better accuracy and broader browser support
 - ElevenLabs TTS for higher quality voices
-- Distinct voices per character
-- Cue-only mode (hide your lines)
 - Multi-device sync
 
 ## Running
