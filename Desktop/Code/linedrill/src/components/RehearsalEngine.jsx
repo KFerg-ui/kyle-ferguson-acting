@@ -5,6 +5,7 @@ import { isSpeechRecognitionSupported, SpeechToText } from "../lib/speech-to-tex
 import { isSpeechSynthesisSupported, TextToSpeech } from "../lib/text-to-speech";
 import { scoreLine, scoreScene, isLineComplete } from "../lib/scoring";
 import { saveRun, getSceneStats } from "../lib/progress-store";
+import { getPitchForCharacter } from "../lib/voice-map";
 
 const GOLD = "#c9a227";
 
@@ -17,7 +18,7 @@ const GOLD = "#c9a227";
  *   onLineChange     — (lineId) => void  (tells parent which line to highlight)
  *   onStop           — () => void         (user exited rehearsal)
  */
-export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop }, ref) {
+export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, onLineChange, onStop, voiceMap, characterMeta }, ref) {
   const [phase, setPhase] = useState("idle"); // idle | direction | partner | listening | done
   const [lineIndex, setLineIndex] = useState(0);
   const [transcript, setTranscript] = useState("");
@@ -46,6 +47,8 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   const sceneRef = useRef(scene);
   const advanceLineRef = useRef(null);
   const recordScoreRef = useRef(null);
+  const voiceMapRef = useRef(voiceMap);
+  const characterMetaRef = useRef(characterMeta);
 
   // Keep refs in sync with state
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
@@ -53,6 +56,8 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
   useEffect(() => { lineIndexRef.current = lineIndex; }, [lineIndex]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { sceneRef.current = scene; }, [scene]);
+  useEffect(() => { voiceMapRef.current = voiceMap; }, [voiceMap]);
+  useEffect(() => { characterMetaRef.current = characterMeta; }, [characterMeta]);
 
   // Check browser support
   useEffect(() => {
@@ -124,7 +129,9 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
       setPhase("partner");
       const isSpeed = modeRef.current === "speed";
       if (ttsRef.current) {
-        ttsRef.current.speak(line.text).then(() => {
+        const charVoice = voiceMapRef.current?.[line.character] || null;
+        const charPitch = getPitchForCharacter(characterMetaRef.current, line.character);
+        ttsRef.current.speak(line.text, { voice: charVoice, pitch: charPitch }).then(() => {
           if (!pausedRef.current) advanceLineRef.current(index + 1);
         }).catch(() => {
           const delay = isSpeed

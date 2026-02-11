@@ -241,15 +241,36 @@ export function mergeResults(aiResult, localResult, rawText) {
   const lines = rawText.split("\n");
 
   // Characters: union of both, normalized and filtered
+  // AI may return objects {name, gender, ageRange, description} or plain strings
   const charSet = new Set();
+  const characterMeta = {};
+
   (localResult.characters || []).forEach((c) => {
     const norm = normalizeCharacterName(c);
-    if (norm && !isBlockedCharacter(norm)) charSet.add(norm);
+    if (norm && !isBlockedCharacter(norm)) {
+      charSet.add(norm);
+      if (!characterMeta[norm]) {
+        characterMeta[norm] = { gender: "unknown", ageRange: "unknown", description: "" };
+      }
+    }
   });
   if (aiResult?.characters) {
     aiResult.characters.forEach((c) => {
-      const norm = normalizeCharacterName(c);
-      if (norm && !isBlockedCharacter(norm)) charSet.add(norm);
+      const isObj = typeof c === "object" && c !== null;
+      const rawName = isObj ? c.name : c;
+      const norm = normalizeCharacterName(rawName || "");
+      if (norm && !isBlockedCharacter(norm)) {
+        charSet.add(norm);
+        if (isObj) {
+          characterMeta[norm] = {
+            gender: c.gender || "unknown",
+            ageRange: c.ageRange || "unknown",
+            description: c.description || "",
+          };
+        } else if (!characterMeta[norm]) {
+          characterMeta[norm] = { gender: "unknown", ageRange: "unknown", description: "" };
+        }
+      }
     });
   }
 
@@ -307,6 +328,7 @@ export function mergeResults(aiResult, localResult, rawText) {
 
   return {
     characters: Array.from(charSet).sort(),
+    characterMeta,
     breaks,
     dialogueEntries,
     format: aiResult?.format || "unknown",

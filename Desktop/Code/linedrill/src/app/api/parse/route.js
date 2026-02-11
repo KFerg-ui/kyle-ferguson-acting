@@ -52,7 +52,7 @@ IMPORTANT: Scripts come in many formats:
 - Stage directions may be in (parentheses), [brackets], or italicized.
 
 Your job:
-1. Identify ALL characters who speak dialogue. A character name appears before dialogue — either on its own line in ALL CAPS, or as "NAME:" or "NAME." at the start of a line.
+1. Identify ALL characters who speak dialogue. A character name appears before dialogue — either on its own line in ALL CAPS, or as "NAME:" or "NAME." at the start of a line. For each character, also determine their gender and approximate age from the dramatis personae section (if present), character descriptions, relationship context ("his wife", "old nurse"), pronoun usage in stage directions, or the character name itself.
 2. Identify every structural break in the script — acts, scenes, parts, slug lines, or any other division the author uses. For each break, give me the EXACT text from the script that marks it and roughly where it falls.
 3. Tell me what format this script uses.
 
@@ -60,7 +60,14 @@ Return ONLY a JSON object with this exact structure:
 {
   "format": "stage_play" | "screenplay" | "tv_script" | "other",
   "formatDescription": "brief description of how this script is formatted",
-  "characters": ["CHARACTER1", "CHARACTER2", ...],
+  "characters": [
+    {
+      "name": "CHARACTER_NAME",
+      "gender": "male" | "female" | "unknown",
+      "ageRange": "young" | "middle" | "elderly" | "unknown",
+      "description": "brief description from dramatis personae or context, empty string if none"
+    }
+  ],
   "characterFormat": "centered_caps" | "name_colon" | "name_period" | "mixed",
   "breaks": [
     {
@@ -71,6 +78,9 @@ Return ONLY a JSON object with this exact structure:
     }
   ]
 }
+
+For gender: use "male" or "female" when you can determine it with reasonable confidence, "unknown" otherwise.
+For ageRange: "young" means under ~35, "middle" means ~35-60, "elderly" means 60+, "unknown" if not determinable.
 
 For suggestedLabel, use the format "ActNumber.SceneNumber" (e.g. "1.1", "1.2", "2.1"). If there are no acts, just use scene numbers like "1", "2", "3". If there are acts but no scenes within them, use "1", "2", "3" for the acts.
 

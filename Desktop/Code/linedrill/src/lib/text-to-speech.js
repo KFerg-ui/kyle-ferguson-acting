@@ -44,8 +44,9 @@ export class TextToSpeech {
     }
   }
 
-  /** Speak text. Returns a Promise that resolves when the utterance finishes. */
-  speak(text) {
+  /** Speak text. Returns a Promise that resolves when the utterance finishes.
+   *  Optional overrides: { voice: SpeechSynthesisVoice, pitch: number } */
+  speak(text, { voice = null, pitch = null } = {}) {
     return new Promise((resolve, reject) => {
       if (!isSpeechSynthesisSupported()) { resolve(); return; }
 
@@ -55,8 +56,8 @@ export class TextToSpeech {
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = this._lang;
       utt.rate = this._rate;
-      utt.pitch = this._pitch;
-      if (this._voice) utt.voice = this._voice;
+      utt.pitch = pitch ?? this._pitch;
+      utt.voice = voice ?? this._voice;
 
       utt.onend = () => resolve();
       utt.onerror = (e) => {
@@ -90,5 +91,18 @@ export class TextToSpeech {
     const utt = new SpeechSynthesisUtterance("");
     utt.volume = 0;
     speechSynthesis.speak(utt);
+  }
+
+  /** Wait for browser voices to load and return them. */
+  static getVoicesAsync() {
+    return new Promise((resolve) => {
+      if (!isSpeechSynthesisSupported()) { resolve([]); return; }
+      const voices = speechSynthesis.getVoices();
+      if (voices.length) { resolve(voices); return; }
+      speechSynthesis.addEventListener("voiceschanged", () => {
+        resolve(speechSynthesis.getVoices());
+      }, { once: true });
+      setTimeout(() => resolve(speechSynthesis.getVoices()), 2000);
+    });
   }
 }

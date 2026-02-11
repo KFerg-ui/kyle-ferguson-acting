@@ -7,12 +7,15 @@ import CharacterStep from "../components/CharacterStep";
 import SceneTaggingStep from "../components/SceneTaggingStep";
 import { SceneNav, ScriptViewer, ScriptStats, SearchBar } from "../components/ScriptViewer";
 import RehearsalEngine from "../components/RehearsalEngine";
+import VoiceSettings from "../components/VoiceSettings";
 
 import { readScriptFile } from "../lib/file-readers";
 import { analyzeScriptWithAI } from "../lib/ai-parser";
 import { localParseScript, mergeResults } from "../lib/local-parser";
 import { buildFinalScenes } from "../lib/scene-helpers";
 import { loadSession, saveSession, clearSession } from "../lib/session-store";
+import { TextToSpeech } from "../lib/text-to-speech";
+import { buildVoiceMap, loadVoiceOverrides, saveVoiceOverrides, clearVoiceOverrides } from "../lib/voice-map";
 
 const GOLD = "#c9a227";
 const BTN_SMALL = {
@@ -38,6 +41,8 @@ export default function HomePage() {
   const [rehearsalActive, setRehearsalActive] = useState(false);
   const [zoom, setZoom] = useState(1.0);
   const [hasMounted, setHasMounted] = useState(false);
+  const [voiceMap, setVoiceMap] = useState({});
+  const [voiceSettingsOpen, setVoiceSettingsOpen] = useState(false);
   const rehearsalRef = useRef(null);
 
   // Restore session from localStorage on mount
@@ -61,6 +66,18 @@ export default function HomePage() {
     if (step === "upload" && !rawText) return;
     saveSession({ step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom });
   }, [step, rawText, parsed, selectedCharacter, finalScenes, fileName, zoom, hasMounted]);
+
+  // Build voice map when characters and selected character are available
+  useEffect(() => {
+    if (!parsed?.characters?.length || !selectedCharacter) return;
+    const init = async () => {
+      await TextToSpeech.getVoicesAsync();
+      const overrides = loadVoiceOverrides();
+      const map = buildVoiceMap(parsed.characters, parsed.characterMeta || {}, selectedCharacter, overrides);
+      setVoiceMap(map);
+    };
+    init();
+  }, [parsed?.characters, selectedCharacter]);
 
   // Build flat list of matches across all scenes
   const searchMatches = useMemo(() => {
@@ -173,6 +190,8 @@ export default function HomePage() {
 
   const reset = () => {
     clearSession();
+    clearVoiceOverrides();
+    setVoiceMap({});
     setStep("upload");
     setParsed(null);
     setSelectedCharacter("");
@@ -302,6 +321,13 @@ export default function HomePage() {
                 <button onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom in">A+</button>
                 {!rehearsalActive && (
                   <>
+                    <button onClick={() => setVoiceSettingsOpen((o) => !o)} style={BTN_SMALL} title="Voice settings">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                      </svg>
+                    </button>
                     <button onClick={() => setSearchOpen((o) => !o)} style={BTN_SMALL} title="Search script (Cmd+F)">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px" }}>
                         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -325,6 +351,27 @@ export default function HomePage() {
               />
             )}
 
+            {voiceSettingsOpen && !rehearsalActive && (
+              <VoiceSettings
+                characters={parsed?.characters || []}
+                characterMeta={parsed?.characterMeta || {}}
+                selectedCharacter={selectedCharacter}
+                voiceMap={voiceMap}
+                onVoiceChange={(charName, voice) => {
+                  const overrides = loadVoiceOverrides();
+                  overrides[charName] = voice.voiceURI;
+                  saveVoiceOverrides(overrides);
+                  setVoiceMap((prev) => ({ ...prev, [charName]: voice }));
+                }}
+                onReset={() => {
+                  clearVoiceOverrides();
+                  const map = buildVoiceMap(parsed.characters, parsed.characterMeta || {}, selectedCharacter);
+                  setVoiceMap(map);
+                }}
+                onClose={() => setVoiceSettingsOpen(false)}
+              />
+            )}
+
             <ScriptStats scenes={finalScenes} selectedCharacter={selectedCharacter} />
             <SceneNav
               scenes={finalScenes}
@@ -342,6 +389,8 @@ export default function HomePage() {
               ref={rehearsalRef}
               scene={finalScenes[activeScene]}
               selectedCharacter={selectedCharacter}
+              voiceMap={voiceMap}
+              characterMeta={parsed?.characterMeta}
               onLineChange={(id) => {
                 setRehearsalLineId(id);
                 setRehearsalActive(!!id);
