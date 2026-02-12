@@ -24,7 +24,8 @@ export default function VoiceSettings({
     return classified.all.map((c) => c.voice);
   }, [classified]);
 
-  const partners = characters.filter((c) => c !== selectedCharacter);
+  // characters prop is already pre-filtered to active partners by page.jsx
+  const partners = characters;
 
   const preview = (voice) => {
     if (!isSpeechSynthesisSupported()) return;
@@ -93,11 +94,10 @@ export default function VoiceSettings({
 
         return (
           <div key={char} style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "6px 0", borderBottom: "1px solid #222",
+            padding: "8px 0", borderBottom: "1px solid #222",
           }}>
             {/* Character name + badges */}
-            <div style={{ flex: "0 0 auto", minWidth: 100 }}>
+            <div style={{ marginBottom: 5 }}>
               <span style={{ fontSize: 12, color: "#ccc", textTransform: "uppercase", fontWeight: 600 }}>
                 {char}
               </span>
@@ -113,62 +113,66 @@ export default function VoiceSettings({
               )}
             </div>
 
-            {/* Voice dropdown */}
-            <select
-              value={currentVoice?.voiceURI || ""}
-              onChange={(e) => {
-                const voice = allVoices.find((v) => v.voiceURI === e.target.value);
-                if (voice) onVoiceChange(char, voice);
-              }}
-              style={{
-                flex: 1, fontSize: 11, padding: "3px 6px",
-                background: "#222", color: "#ccc", border: "1px solid #444",
-                borderRadius: 3, fontFamily: "inherit", cursor: "pointer",
-              }}
-            >
-              {femaleVoices.length > 0 && (
-                <optgroup label="Female">
-                  {femaleVoices.map((v) => (
-                    <option key={v.voiceURI} value={v.voiceURI}>
-                      {v.name}{v.localService ? "" : " (cloud)"}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {maleVoices.length > 0 && (
-                <optgroup label="Male">
-                  {maleVoices.map((v) => (
-                    <option key={v.voiceURI} value={v.voiceURI}>
-                      {v.name}{v.localService ? "" : " (cloud)"}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {otherVoices.length > 0 && (
-                <optgroup label="Other">
-                  {otherVoices.map((v) => (
-                    <option key={v.voiceURI} value={v.voiceURI}>
-                      {v.name}{v.localService ? "" : " (cloud)"}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+            {/* Voice dropdown + preview — full width row */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select
+                value={currentVoice?.voiceURI || ""}
+                onChange={(e) => {
+                  const voice = allVoices.find((v) => v.voiceURI === e.target.value);
+                  if (voice) onVoiceChange(char, voice);
+                }}
+                style={{
+                  flex: 1, fontSize: 12, padding: "6px 8px",
+                  background: "#222", color: "#ccc", border: "1px solid #444",
+                  borderRadius: 4, fontFamily: "inherit", cursor: "pointer",
+                  minHeight: 36,
+                }}
+              >
+                {femaleVoices.length > 0 && (
+                  <optgroup label="Female">
+                    {femaleVoices.map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name}{v.localService ? "" : " (cloud)"}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {maleVoices.length > 0 && (
+                  <optgroup label="Male">
+                    {maleVoices.map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name}{v.localService ? "" : " (cloud)"}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {otherVoices.length > 0 && (
+                  <optgroup label="Other">
+                    {otherVoices.map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name}{v.localService ? "" : " (cloud)"}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
 
-            {/* Preview button */}
-            <button
-              onClick={() => currentVoice && preview(currentVoice)}
-              title="Preview voice"
-              style={{
-                flex: "0 0 auto", padding: "3px 6px", fontSize: 11,
-                background: "transparent", border: "1px solid #444",
-                borderRadius: 3, color: "#888", cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: "-1px" }}>
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-            </button>
+              {/* Preview button */}
+              <button
+                onClick={() => currentVoice && preview(currentVoice)}
+                title="Preview voice"
+                style={{
+                  flex: "0 0 auto", padding: "6px 10px",
+                  background: "transparent", border: "1px solid #444",
+                  borderRadius: 4, color: "#888", cursor: "pointer", fontFamily: "inherit",
+                  minHeight: 36, display: "flex", alignItems: "center",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </button>
+            </div>
           </div>
         );
       })}

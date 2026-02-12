@@ -11,7 +11,7 @@ import VoiceSettings from "../components/VoiceSettings";
 
 import { readScriptFile } from "../lib/file-readers";
 import { analyzeScriptWithAI } from "../lib/ai-parser";
-import { localParseScript, mergeResults } from "../lib/local-parser";
+import { localParseScript, mergeResults, autoMergeAllCharacters } from "../lib/local-parser";
 import { buildFinalScenes } from "../lib/scene-helpers";
 import { loadSession, saveSession, clearSession } from "../lib/session-store";
 import { TextToSpeech } from "../lib/text-to-speech";
@@ -42,8 +42,9 @@ function GhostLight({ size = 48 }) {
 }
 
 const BTN_SMALL = {
-  padding: "4px 12px", borderRadius: 4, border: "1px solid #444",
+  padding: "8px 12px", borderRadius: 4, border: "1px solid #444",
   background: "transparent", color: "#aaa", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+  minHeight: 36, display: "inline-flex", alignItems: "center", justifyContent: "center",
 };
 
 export default function HomePage() {
@@ -112,6 +113,20 @@ export default function HomePage() {
     };
     init();
   }, [parsed?.characters, selectedCharacter]);
+
+  // Characters that actually speak in confirmed scenes (for VoiceSettings)
+  const activePartnerCharacters = useMemo(() => {
+    if (!finalScenes.length || !selectedCharacter) return [];
+    const chars = new Set();
+    for (const scene of finalScenes) {
+      for (const line of scene.lines) {
+        if (line.type === "dialogue" && line.character && line.character !== selectedCharacter) {
+          chars.add(line.character);
+        }
+      }
+    }
+    return Array.from(chars).sort();
+  }, [finalScenes, selectedCharacter]);
 
   // Build flat list of matches across all scenes
   const searchMatches = useMemo(() => {
@@ -239,8 +254,8 @@ export default function HomePage() {
   // Show minimal shell until localStorage restore completes (avoids SSR hydration flash)
   if (!hasMounted) {
     return (
-      <div style={{ minHeight: "100vh" }}>
-        <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px" }}>
+      <div style={{ minHeight: "100dvh" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: "20px 14px" }}>
           <header style={{ textAlign: "center" }}>
             <GhostLight />
             <h1 style={{
@@ -256,8 +271,8 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh" }}>
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 16px", animation: "fadeIn 0.4s ease" }}>
+    <div style={{ minHeight: "100dvh" }}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "20px 14px", animation: "fadeIn 0.4s ease" }}>
         {/* Header */}
         <header style={{ textAlign: "center", marginBottom: 24 }}>
           <GhostLight />
@@ -293,7 +308,7 @@ export default function HomePage() {
             marginBottom: 14, padding: "7px 12px",
             background: "rgba(255,255,255,0.03)", borderRadius: 5, border: "1px solid #333",
           }}>
-            <span style={{ fontSize: 12, color: "#999" }}>📄 {fileName}</span>
+            <span style={{ fontSize: 12, color: "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>📄 {fileName}</span>
             <button onClick={reset} style={BTN_SMALL}>NEW SCRIPT</button>
           </div>
         )}
@@ -310,6 +325,7 @@ export default function HomePage() {
             formatInfo={parsed.formatDescription}
             dialogueEntries={parsed.dialogueEntries}
             onSelect={(canonical, mergedVariants) => {
+              let updatedParsed = parsed;
               if (mergedVariants && mergedVariants.length > 1) {
                 const variantSet = new Set(mergedVariants);
                 const updatedEntries = parsed.dialogueEntries.map((entry) => {
@@ -321,8 +337,12 @@ export default function HomePage() {
                 const updatedChars = parsed.characters.filter(
                   (c) => !variantSet.has(c) || c === canonical
                 );
-                setParsed({ ...parsed, dialogueEntries: updatedEntries, characters: updatedChars });
+                updatedParsed = { ...parsed, dialogueEntries: updatedEntries, characters: updatedChars };
               }
+              // Auto-merge prefix variants for ALL remaining characters
+              // so partner characters are clean in voice settings and rehearsal
+              updatedParsed = autoMergeAllCharacters(updatedParsed);
+              setParsed(updatedParsed);
               setSelectedCharacter(canonical);
               setStep("tag");
             }}
@@ -347,11 +367,11 @@ export default function HomePage() {
         {/* STEP: Script viewer */}
         {step === "view" && finalScenes.length > 0 && (
           <div style={{ animation: "fadeIn 0.3s ease" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 6, marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: "#888" }}>
                 Playing: <span style={{ color: GOLD, fontWeight: 700 }}>{selectedCharacter}</span>
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 {/* Zoom controls */}
                 <button onClick={() => setZoom((z) => Math.max(0.8, +(z - 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom out">A-</button>
                 <button onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.1).toFixed(1)))} style={BTN_SMALL} title="Zoom in">A+</button>
@@ -403,7 +423,7 @@ export default function HomePage() {
 
             {voiceSettingsOpen && !rehearsalActive && (
               <VoiceSettings
-                characters={parsed?.characters || []}
+                characters={activePartnerCharacters}
                 characterMeta={parsed?.characterMeta || {}}
                 selectedCharacter={selectedCharacter}
                 voiceMap={voiceMap}

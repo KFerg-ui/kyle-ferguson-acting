@@ -141,15 +141,28 @@ API key is server-side only via `src/app/api/parse/route.js` using `ANTHROPIC_AP
 - Ghost light favicon and inline SVG icon
 - Click-to-start from any script line or score breakdown line
 
-### Slice 4+ (Not Started)
-- Hide My Lines mode (toggle to hide user's dialogue text in script display — planned, see plan below)
-- Deepgram STT for better accuracy and broader browser support
+### Slice 4: Mobile & Production Hardening (Complete)
+- **Viewport meta tag** — Missing `export const viewport` in layout.jsx broke iPhone rendering entirely (980px default viewport). Added with `device-width`, `viewport-fit: cover`, `user-scalable: false`.
+- **Next.js font optimization** — Replaced render-blocking `@import url(Google Fonts)` in CSS with `next/font/google` Courier_Prime. Fonts are now preloaded as `.woff2` with `font-display: swap`.
+- **Apple web app meta** — Added `apple-mobile-web-app-capable`, `black-translucent` status bar, and `themeColor` in viewport export.
+- **Safe area insets** — Body padding uses `env(safe-area-inset-*)` for notched iPhones.
+- **dvh units** — Replaced `vh` with `dvh` for main container and script viewer to handle iOS Safari dynamic address bar.
+- **Touch targets** — Increased all button padding to meet 36px+ minimum (BTN_SMALL, search buttons, rehearsal controls, voice settings).
+- **Toolbar wrapping** — Toolbar flex container wraps on narrow screens instead of overflowing.
+- **Character auto-merge** — `autoMergeAllCharacters()` merges prefix variants for ALL characters (not just the selected one) so VoiceSettings shows clean partner names.
+- **Character normalization** — `normalizeCharacterName()` now strips internal periods from titles (MRS./DR./ST./etc.).
+- **VoiceSettings filtering** — Only shows characters that actually have dialogue in confirmed scenes, not phantom characters from the full parse.
+- **VoiceSettings layout** — Stacked layout (name on top, dropdown below) instead of cramped horizontal row.
+- **Deepgram token security** — Endpoint now uses Deepgram's `/v1/auth/grant` to issue 5-minute temporary tokens instead of exposing the raw API key.
+- **iOS Safari fixes** — `-webkit-tap-highlight-color: transparent`, `-webkit-text-size-adjust: 100%`, `overscroll-behavior: none`, `button:active` opacity feedback, native select styling fix.
+
+### Slice 5+ (Not Started)
 - ElevenLabs TTS for higher quality voices
 - Multi-device sync
 
 ## Running
 ```bash
 npm install
-cp .env.example .env.local  # add NEXT_PUBLIC_ANTHROPIC_API_KEY
+cp .env.example .env.local  # add ANTHROPIC_API_KEY
 npm run dev                  # http://localhost:3000
 ```

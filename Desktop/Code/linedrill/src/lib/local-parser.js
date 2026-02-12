@@ -33,8 +33,13 @@ const NON_CHARACTER_PATTERNS = [
 
 export function normalizeCharacterName(raw) {
   let name = raw.trim().toUpperCase();
+  // Strip parentheticals: (cont'd), (V.O.), (O.S.), etc.
   name = name.replace(/\s*\(.*?\)\s*/g, " ");
+  // Strip trailing periods
   name = name.replace(/\.+$/, "");
+  // Normalize common abbreviated titles: MRS. → MRS, DR. → DR, etc.
+  name = name.replace(/\b(MRS?|DR|ST|SGT|CPT|LT|GEN|COL|PROF|REV|SR|JR)\./g, "$1");
+  // Collapse whitespace
   name = name.replace(/\s{2,}/g, " ").trim();
   return name;
 }
@@ -73,6 +78,61 @@ export function groupSimilarCharacters(characters) {
   }
 
   return groups;
+}
+
+/**
+ * Auto-merge ALL prefix-variant characters into their canonical (shortest) form.
+ * Called after character selection to ensure partner characters are clean.
+ * Returns updated characters, dialogueEntries, and characterMeta.
+ */
+export function autoMergeAllCharacters(parsed) {
+  const groups = groupSimilarCharacters(parsed.characters);
+  const merges = new Map(); // variant → canonical
+
+  for (const [canonical, variants] of groups) {
+    for (const v of variants) {
+      if (v !== canonical) merges.set(v, canonical);
+    }
+  }
+
+  // Nothing to merge
+  if (merges.size === 0) return parsed;
+
+  // Merge dialogue entries
+  const updatedEntries = parsed.dialogueEntries.map((d) => {
+    if (d.type === "dialogue" && merges.has(d.character)) {
+      return { ...d, character: merges.get(d.character) };
+    }
+    return d;
+  });
+
+  // Merge character list
+  const seen = new Set();
+  const updatedChars = [];
+  for (const c of parsed.characters) {
+    const canonical = merges.get(c) || c;
+    if (!seen.has(canonical)) {
+      seen.add(canonical);
+      updatedChars.push(canonical);
+    }
+  }
+
+  // Merge characterMeta — canonical keeps its meta, variants' meta is discarded
+  // (canonical is the shortest name, which is usually the correct one)
+  const updatedMeta = { ...(parsed.characterMeta || {}) };
+  for (const [variant, canonical] of merges) {
+    if (updatedMeta[variant] && !updatedMeta[canonical]) {
+      updatedMeta[canonical] = updatedMeta[variant];
+    }
+    delete updatedMeta[variant];
+  }
+
+  return {
+    ...parsed,
+    characters: updatedChars.sort(),
+    dialogueEntries: updatedEntries,
+    characterMeta: updatedMeta,
+  };
 }
 
 // --- Main parser ---
@@ -326,11 +386,36 @@ export function mergeResults(aiResult, localResult, rawText) {
     breaks = localResult.breaks || [];
   }
 
+  // Auto-merge character variants that normalized to identical names
+  // (e.g., "MRS. JONES" and "MRS JONES" both normalize to "MRS JONES")
+  // Also merge prefix variants: dialogue from "ROMEO (CONT'D)" already normalized to "ROMEO"
+  // Consolidate characterMeta — prefer the entry with actual metadata
+  const finalChars = Array.from(charSet).sort();
+
+  // Deduplicate dialogue entries by re-normalizing character names
+  const finalEntries = dialogueEntries.map((d) => {
+    if (d.type === "dialogue" && d.character) {
+      const norm = normalizeCharacterName(d.character);
+      if (norm !== d.character) return { ...d, character: norm };
+    }
+    return d;
+  });
+
+  // Rebuild charSet from actual dialogue to eliminate phantom characters
+  const activeChars = new Set();
+  for (const d of finalEntries) {
+    if (d.type === "dialogue" && d.character) activeChars.add(d.character);
+  }
+  // Keep AI-only characters (may appear later in script beyond our 25K window)
+  for (const c of finalChars) {
+    activeChars.add(c);
+  }
+
   return {
-    characters: Array.from(charSet).sort(),
+    characters: Array.from(activeChars).sort(),
     characterMeta,
     breaks,
-    dialogueEntries,
+    dialogueEntries: finalEntries,
     format: aiResult?.format || "unknown",
     formatDescription: aiResult?.formatDescription || "",
   };

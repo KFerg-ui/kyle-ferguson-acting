@@ -421,8 +421,23 @@ export default forwardRef(function RehearsalEngine({ scene, selectedCharacter, o
 
     if (nextUserIdx === -1) return; // No more user lines ahead
 
-    // Cue = line right before user's next line
-    const cueIdx = nextUserIdx > 0 ? nextUserIdx - 1 : 0;
+    // Cue = last partner dialogue line before user's next line (skip past directions)
+    let cueIdx = -1;
+    for (let i = nextUserIdx - 1; i >= 0; i--) {
+      const l = s.lines[i];
+      if (l.type === "dialogue" && l.character !== selectedCharacter) {
+        cueIdx = i;
+        break;
+      }
+    }
+    // No partner dialogue found — jump straight to user's line
+    if (cueIdx === -1) {
+      if (ttsRef.current) ttsRef.current.stop();
+      if (sttRef.current) sttRef.current.abort();
+      if (timerRef.current) clearTimeout(timerRef.current);
+      advanceLineRef.current(nextUserIdx);
+      return;
+    }
 
     // Stop current TTS/STT/timers
     if (ttsRef.current) ttsRef.current.stop();
@@ -829,8 +844,9 @@ const btnSecondary = {
 const btnControl = {
   display: "flex",
   alignItems: "center",
+  justifyContent: "center",
   gap: 6,
-  padding: "8px 16px",
+  padding: "10px 14px",
   borderRadius: 5,
   border: "1px solid #444",
   background: "transparent",
@@ -838,4 +854,6 @@ const btnControl = {
   fontSize: 12,
   cursor: "pointer",
   fontFamily: "inherit",
+  minHeight: 40,
+  flex: "1 1 0",
 };

@@ -32,7 +32,7 @@ export default function DropZone({ onFileSelect, isLoading, loadingMsg }) {
       style={{
         border: `2px dashed ${dragOver ? GOLD : "#444"}`,
         borderRadius: 8,
-        padding: "56px 28px",
+        padding: "40px 20px",
         textAlign: "center",
         cursor: isLoading ? "default" : "pointer",
         background: dragOver ? "rgba(201,162,39,0.05)" : "transparent",

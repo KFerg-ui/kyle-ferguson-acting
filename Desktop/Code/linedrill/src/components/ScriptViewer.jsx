@@ -88,7 +88,8 @@ export function SearchBar({ query, onQueryChange, matchCount, activeMatchIdx, on
 
 const SEARCH_BTN = {
   background: "transparent", border: "none", color: "#888", cursor: "pointer",
-  padding: 4, borderRadius: 3, display: "flex", alignItems: "center",
+  padding: 8, borderRadius: 3, display: "flex", alignItems: "center",
+  minWidth: 36, minHeight: 36, justifyContent: "center",
 };
 
 function HighlightText({ text, query, isActive }) {
@@ -149,8 +150,8 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
 
   return (
     <div ref={scrollRef} key={scene.label} style={{
-      background: "#1a1a1a", borderRadius: 6, padding: "28px 20px",
-      maxHeight: "62vh", overflowY: "auto", border: "1px solid #333", WebkitOverflowScrolling: "touch",
+      background: "#1a1a1a", borderRadius: 6, padding: "20px 14px",
+      maxHeight: "62dvh", overflowY: "auto", border: "1px solid #333", WebkitOverflowScrolling: "touch",
       animation: "fadeIn 0.25s ease",
     }}>
       {/* Scene heading */}
@@ -212,7 +213,7 @@ export function ScriptViewer({ scene, selectedCharacter, searchQuery = "", activ
             </div>
             {/* Dialogue text */}
             <div style={{
-              fontSize: z(16), lineHeight: 1.75, maxWidth: 500, margin: "0 auto",
+              fontSize: z(16), lineHeight: 1.75, maxWidth: "100%", margin: "0 auto",
               color: isMe && hideMyLines ? "#555" : isMe ? "#fff" : "#ddd",
               padding: isMe ? "5px 14px" : "2px 14px",
               background: dialogueBg(isActiveMatch, isMe),
