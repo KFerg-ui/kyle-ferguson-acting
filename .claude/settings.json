@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/shazam/Code"
+    ],
+    "allow": [
+      "Read(//Users/shazam/.claude/projects/-Users-shazam/memory/**)"
+    ]
+  }
+}
